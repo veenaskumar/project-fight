@@ -1,0 +1,193 @@
+[
+    {
+        "timestamp": "2025-08-19 14:25:54",
+        "source": "fi005.mp4 (frame 12, approx 0.6s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:54",
+        "source": "fi005.mp4 (frame 13, approx 0.65s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 23, approx 1.15s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 24, approx 1.2s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 25, approx 1.25s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 26, approx 1.3s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 27, approx 1.35s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 28, approx 1.4s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 29, approx 1.45s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:55",
+        "source": "fi005.mp4 (frame 30, approx 1.5s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:56",
+        "source": "fi005.mp4 (frame 35, approx 1.75s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:56",
+        "source": "fi005.mp4 (frame 45, approx 2.25s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 46, approx 2.3s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 47, approx 2.35s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 48, approx 2.4s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 49, approx 2.45s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 50, approx 2.5s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 51, approx 2.55s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 52, approx 2.6s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:25:57",
+        "source": "fi005.mp4 (frame 55, approx 2.75s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 8, approx 0.34782608695652173s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 9, approx 0.391304347826087s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 10, approx 0.43478260869565216s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 11, approx 0.4782608695652174s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 12, approx 0.5217391304347826s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 13, approx 0.5652173913043478s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 14, approx 0.6086956521739131s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 15, approx 0.6521739130434783s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:39",
+        "source": "fi031.mp4 (frame 16, approx 0.6956521739130435s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:40",
+        "source": "fi031.mp4 (frame 17, approx 0.7391304347826086s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:28:40",
+        "source": "fi031.mp4 (frame 18, approx 0.782608695652174s)",
+        "event": "violence_detected"
+    },
+    {
+        "timestamp": "2025-08-19 14:43:25",
+        "source": "fi031.mp4 (frame 16, approx 0.6956521739130435s)",
+        "event": "violence_detected",
+        "confidence": 0.5673009753227234
+    },
+    {
+        "timestamp": "2025-08-19 14:43:25",
+        "source": "fi031.mp4 (frame 17, approx 0.7391304347826086s)",
+        "event": "violence_detected",
+        "confidence": 0.6081322431564331
+    },
+    {
+        "timestamp": "2025-08-19 14:43:25",
+        "source": "fi031.mp4 (frame 18, approx 0.782608695652174s)",
+        "event": "violence_detected",
+        "confidence": 0.5342892408370972
+    },
+    {
+        "timestamp": "2025-08-19 14:43:32",
+        "source": "fi031.mp4 (frame 16, approx 0.6956521739130435s)",
+        "event": "violence_detected",
+        "confidence": 0.5673009753227234
+    },
+    {
+        "timestamp": "2025-08-19 14:43:32",
+        "source": "fi031.mp4 (frame 17, approx 0.7391304347826086s)",
+        "event": "violence_detected",
+        "confidence": 0.6081322431564331
+    },
+    {
+        "timestamp": "2025-08-19 14:43:32",
+        "source": "fi031.mp4 (frame 18, approx 0.782608695652174s)",
+        "event": "violence_detected",
+        "confidence": 0.5342892408370972
+    }
+]
