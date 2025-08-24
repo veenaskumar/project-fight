@@ -51,7 +51,7 @@ def log_violence(timestamp, source, confidence=None):
         json.dump(data, f, indent=4)
 
 # Load model
-model = YOLO("violence-detection-through-cctv_step3.pt")
+model = YOLO("final_fight_updated.pt")
 
 
 # Sidebar navigation
