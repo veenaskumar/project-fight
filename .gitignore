@@ -97,7 +97,6 @@ desktop.ini
 *.mkv
 
 # Model files
-*.pt
 *.pth
 *.h5
 *.onnx
