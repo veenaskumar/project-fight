@@ -61,7 +61,7 @@ auto_delete_old_logs()
 # -------------------------------
 # Load YOLO model
 # -------------------------------
-model = YOLO("final_fight_fall.pt")
+model = YOLO("fina_violenec_fall.pt")
 
 # -------------------------------
 # Sidebar navigation
