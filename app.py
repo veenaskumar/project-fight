@@ -61,9 +61,9 @@ auto_delete_old_logs()
 # -------------------------------
 # Load YOLO model
 # -------------------------------
-model = YOLO("fina_violenec_fall.pt")
+model = YOLO("violence_detection_v4.pt")
 
-# -------------------------------
+# --------------------------------
 # Sidebar navigation
 # -------------------------------
 st.sidebar.title("Navigation")
