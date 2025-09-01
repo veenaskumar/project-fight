@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Roboto', sans-serif;
+}
+
+main .block-container {
+    padding: 1rem 2rem;
+}
+
+/* Button styling */
+.stButton>button {
+    background-color: #ff0000;
+    color: #ffffff;
+    border-radius: 4px;
+    border: none;
+}
+
+.stButton>button:hover {
+    background-color: #cc0000;
+}
+
+/* Slider accent */
+.stSlider > div[data-testid="stThumb"] > div {
+    background-color: #ff0000;
+}
+
+.stSlider > div[data-testid="stTrack"] > div:nth-child(2) {
+    background-color: #ff0000;
+}
+
+/* Fade-in animation for images */
+.stImage img {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {opacity: 0;}
+    to {opacity: 1;}
+}
+
+/* Responsive header */
+.ns-header h1 {
+    margin-top: 0;
+}
+
+@media (max-width: 600px) {
+    .ns-header h1 {
+        font-size: 1.5rem;
+    }
+}

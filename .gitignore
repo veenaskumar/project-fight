@@ -64,7 +64,6 @@ Pipfile.lock
 .vscode/
 
 # Streamlit
-.streamlit/config.toml
 
 # Environment variables
 .env
@@ -95,6 +94,7 @@ desktop.ini
 *.avi
 *.mov
 *.mkv
+logo.png
 
 # Model files
 *.pth
