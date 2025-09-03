@@ -18,7 +18,7 @@ st.set_page_config(page_title="NightShield", page_icon=LOGO_PATH, layout="wide")
 with open(CSS_PATH) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-st.sidebar.image(str(LOGO_PATH), use_column_width=True)
+st.sidebar.image(str(LOGO_PATH), use_container_width=True)
 st.sidebar.markdown("## NightShield")
 
 header_col1, header_col2 = st.columns([1, 8])
