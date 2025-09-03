@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 # nightshield-ai
+=======
+>>>>>>> 0799432be215e26229531ac13deeaf92ce2cf829
 # Project-Fight: Violence Detection with YOLOv8
 [![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/veenaskumar/project-fight)
 
