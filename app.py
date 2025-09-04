@@ -8,12 +8,18 @@ import json
 import threading
 import queue
 from pathlib import Path
+from twilio.rest import Client
+from dotenv import load_dotenv
 
+# -------------------------------
+# Paths & Config
+# -------------------------------
 BASE_DIR = Path(__file__).parent
 LOGO_PATH = BASE_DIR / "logo.png"
 CSS_PATH = BASE_DIR / "styles.css"
+LOG_FILE = "violence_detection_log.json"
 
-st.set_page_config(page_title="NightShield", page_icon=LOGO_PATH, layout="wide")
+st.set_page_config(page_title="NightShield", page_icon=str(LOGO_PATH), layout="wide")
 
 with open(CSS_PATH) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -27,7 +33,26 @@ with header_col1:
 with header_col2:
     st.markdown("<div class='ns-header'><h1>NightShield</h1></div>", unsafe_allow_html=True)
 
-LOG_FILE = "violence_detection_log.json"
+# -------------------------------
+# Load environment variables
+# -------------------------------
+load_dotenv()
+TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
+ALERT_PHONE_NUMBER = os.getenv("TWILIO_TO_NUMBER")
+
+client = None
+if TWILIO_SID and TWILIO_AUTH:
+    client = Client(TWILIO_SID, TWILIO_AUTH)
+
+# -------------------------------
+# Detection State (for SMS control)
+# -------------------------------
+DETECTION_COUNT = {"violence_detected": 0, "fall_detected": 0}
+ALERT_SENT = {"violence_detected": False, "fall_detected": False}
+NO_DETECTION_COUNT = {"violence_detected": 0, "fall_detected": 0}
+FRAME_THRESHOLD = 10  # frames before triggering/resetting
 
 # -------------------------------
 # Auto-delete logs older than 24h
@@ -53,12 +78,28 @@ def auto_delete_old_logs():
         with open(LOG_FILE, "w") as f:
             json.dump(new_data, f, indent=4)
 
+# -------------------------------
+# Log incidents + Twilio alert
+# -------------------------------
+def log_incident(timestamp, source, event_type="violence_detected", confidence=None):
+    global DETECTION_COUNT, ALERT_SENT, NO_DETECTION_COUNT
 
-def log_violence(timestamp, source, confidence=None):
+    # Increment detection count
+    DETECTION_COUNT[event_type] += 1
+    NO_DETECTION_COUNT[event_type] = 0  # reset no-detection streak
+
+    # Format confidence properly
+    conf_str = f"{confidence:.2f}" if confidence is not None else "N/A"
+
+    event_msg = (
+        f"🚨 {event_type.replace('_', ' ').title()} detected at {timestamp} "
+        f"(source: {source}, confidence={conf_str})"
+    )
+
     log_entry = {
         "timestamp": timestamp,
         "source": source,
-        "event": "violence_detected",
+        "event": event_type,
     }
     if confidence is not None:
         log_entry["confidence"] = confidence
@@ -73,6 +114,18 @@ def log_violence(timestamp, source, confidence=None):
     with open(LOG_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+    # 🔔 Twilio SMS only once per 10-frame detection
+    if client and not ALERT_SENT[event_type] and DETECTION_COUNT[event_type] >= FRAME_THRESHOLD:
+        try:
+            client.messages.create(
+                body=event_msg,
+                from_=TWILIO_PHONE_NUMBER,
+                to=ALERT_PHONE_NUMBER
+            )
+            ALERT_SENT[event_type] = True  # prevent spamming
+            print(f"✅ SMS sent: {event_msg}")
+        except Exception as e:
+            print(f"Twilio error: {e}")
 
 # Run cleanup on startup
 auto_delete_old_logs()
@@ -82,6 +135,9 @@ auto_delete_old_logs()
 # -------------------------------
 model = YOLO("violence_detection_v4.pt")
 
+# -------------------------------
+# UI Tabs
+# -------------------------------
 tab1, tab2 = st.tabs(["Detection", "Incidents"])
 
 with tab1:
@@ -89,7 +145,7 @@ with tab1:
     st.write("Upload an image, video, or connect an RTSP stream for detection.")
 
     st.sidebar.subheader("RTSP Controls")
-    rtsp_url = st.sidebar.text_input("RTSP stream URL", key="rtsp_url", value="rtsp://127.0.0.1:8554/mystream")
+    rtsp_url = st.sidebar.text_input("RTSP stream URL", key="rtsp_url", value="")
     confidence_threshold = st.sidebar.slider(
         "Detection Confidence Threshold",
         min_value=0.0,
@@ -122,6 +178,7 @@ with tab1:
                 break
 
             results = model(frame)
+            detection_made = False
 
             for r in results:
                 annotated = r.plot()
@@ -135,13 +192,24 @@ with tab1:
 
                         if conf is not None and conf >= confidence_threshold:
                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            log_violence(
+                            log_incident(
                                 timestamp,
                                 f"RTSP ({rtsp_url}) frame {frame_idx}, approx {frame_idx / int(fps)}s",
                                 confidence=conf,
+                                event_type="violence_detected"
                             )
+                            detection_made = True
 
                 frame_queue.put((annotated, None))
+
+            # Track no-detection frames
+            if not detection_made:
+                for key in NO_DETECTION_COUNT:
+                    NO_DETECTION_COUNT[key] += 1
+                    if NO_DETECTION_COUNT[key] >= FRAME_THRESHOLD:
+                        DETECTION_COUNT[key] = 0
+                        ALERT_SENT[key] = False
+                        NO_DETECTION_COUNT[key] = 0
 
             frame_idx += 1
 
@@ -203,6 +271,7 @@ with tab1:
             with st.spinner("Analyzing image..."):
                 img = cv2.imread(tfile.name)
                 results = model(img)
+                detection_made = False
                 for r in results:
                     annotated = r.plot()
                     st.image(annotated, channels="BGR")
@@ -210,11 +279,20 @@ with tab1:
                         for box in r.boxes:
                             conf = float(box.conf[0]) if hasattr(box, "conf") else None
                             if conf is not None and conf >= confidence_threshold:
-                                log_violence(
+                                log_incident(
                                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                     uploaded_file.name,
                                     confidence=conf,
+                                    event_type="violence_detected"
                                 )
+                                detection_made = True
+                if not detection_made:
+                    for key in NO_DETECTION_COUNT:
+                        NO_DETECTION_COUNT[key] += 1
+                        if NO_DETECTION_COUNT[key] >= FRAME_THRESHOLD:
+                            DETECTION_COUNT[key] = 0
+                            ALERT_SENT[key] = False
+                            NO_DETECTION_COUNT[key] = 0
 
         elif uploaded_file.type.startswith("video"):
             cap = cv2.VideoCapture(tfile.name)
@@ -229,6 +307,7 @@ with tab1:
                         break
 
                     results = model(frame)
+                    detection_made = False
                     for r in results:
                         annotated = r.plot()
                         if r.boxes and len(r.boxes) > 0:
@@ -236,12 +315,22 @@ with tab1:
                                 conf = float(box.conf[0]) if hasattr(box, "conf") else None
                                 if conf is not None and conf >= confidence_threshold:
                                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    log_violence(
+                                    log_incident(
                                         timestamp,
                                         f"{uploaded_file.name} (frame {frame_idx}, approx {frame_idx/int(fps)}s)",
                                         confidence=conf,
+                                        event_type="violence_detected"
                                     )
+                                    detection_made = True
                         st.image(annotated, channels="BGR", use_container_width=True)
+
+                    if not detection_made:
+                        for key in NO_DETECTION_COUNT:
+                            NO_DETECTION_COUNT[key] += 1
+                            if NO_DETECTION_COUNT[key] >= FRAME_THRESHOLD:
+                                DETECTION_COUNT[key] = 0
+                                ALERT_SENT[key] = False
+                                NO_DETECTION_COUNT[key] = 0
 
                     frame_idx += 1
 
