@@ -10,6 +10,7 @@ import queue
 from pathlib import Path
 from twilio.rest import Client
 from dotenv import load_dotenv
+import re
 
 # -------------------------------
 # Paths & Config
@@ -40,7 +41,6 @@ load_dotenv()
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
-ALERT_PHONE_NUMBER = os.getenv("TWILIO_TO_NUMBER")
 
 client = None
 if TWILIO_SID and TWILIO_AUTH:
@@ -81,7 +81,7 @@ def auto_delete_old_logs():
 # -------------------------------
 # Log incidents + Twilio alert
 # -------------------------------
-def log_incident(timestamp, source, event_type="violence_detected", confidence=None):
+def log_incident(timestamp, source, event_type="violence_detected", confidence=None, alert_number=None):
     global DETECTION_COUNT, ALERT_SENT, NO_DETECTION_COUNT
 
     # Increment detection count
@@ -91,10 +91,16 @@ def log_incident(timestamp, source, event_type="violence_detected", confidence=N
     # Format confidence properly
     conf_str = f"{confidence:.2f}" if confidence is not None else "N/A"
 
-    event_msg = (
-        f"🚨 {event_type.replace('_', ' ').title()} detected at {timestamp} "
-        f"(source: {source}, confidence={conf_str})"
-    )
+    if event_type == "violence_detected":
+        event_msg = (
+            f"🚨 Violence detected at {timestamp} "
+            f"(source: {source}, confidence={conf_str})"
+        )
+    else:
+        event_msg = (
+            f"⚠️ Fall detected at {timestamp} "
+            f"(source: {source}, confidence={conf_str})"
+        )
 
     log_entry = {
         "timestamp": timestamp,
@@ -115,12 +121,12 @@ def log_incident(timestamp, source, event_type="violence_detected", confidence=N
         json.dump(data, f, indent=4)
 
     # 🔔 Twilio SMS only once per 10-frame detection
-    if client and not ALERT_SENT[event_type] and DETECTION_COUNT[event_type] >= FRAME_THRESHOLD:
+    if client and alert_number and not ALERT_SENT[event_type] and DETECTION_COUNT[event_type] >= FRAME_THRESHOLD:
         try:
             client.messages.create(
                 body=event_msg,
                 from_=TWILIO_PHONE_NUMBER,
-                to=ALERT_PHONE_NUMBER
+                to=alert_number
             )
             ALERT_SENT[event_type] = True  # prevent spamming
             print(f"✅ SMS sent: {event_msg}")
@@ -136,6 +142,13 @@ auto_delete_old_logs()
 model = YOLO("violence_detection_v4.pt")
 
 # -------------------------------
+# Phone validation helper
+# -------------------------------
+def is_valid_phone(number: str) -> bool:
+    pattern = re.compile(r"^\+[1-9]\d{7,14}$")  # E.164 format
+    return bool(pattern.match(number))
+
+# -------------------------------
 # UI Tabs
 # -------------------------------
 tab1, tab2 = st.tabs(["Detection", "Incidents"])
@@ -143,6 +156,14 @@ tab1, tab2 = st.tabs(["Detection", "Incidents"])
 with tab1:
     st.subheader("🎥 Violence Detection with YOLOv8")
     st.write("Upload an image, video, or connect an RTSP stream for detection.")
+
+    # 🔑 Mandatory phone number input
+    st.sidebar.subheader("Alert Settings")
+    alert_number = st.sidebar.text_input("Enter phone number for alerts (E.164 format, e.g. +91xxxxxxxxxx)", key="alert_number")
+
+    valid_number = is_valid_phone(alert_number) if alert_number else False
+    if not valid_number:
+        st.warning("⚠️ Please enter a valid phone number in E.164 format before starting detection.")
 
     st.sidebar.subheader("RTSP Controls")
     rtsp_url = st.sidebar.text_input("RTSP stream URL", key="rtsp_url", value="")
@@ -160,7 +181,7 @@ with tab1:
     def stop_rtsp():
         st.session_state["rtsp_running"] = False
 
-    def run_rtsp_stream(rtsp_url, confidence_threshold, frame_queue, stop_event):
+    def run_rtsp_stream(rtsp_url, confidence_threshold, frame_queue, stop_event, alert_number):
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
         cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
 
@@ -196,7 +217,8 @@ with tab1:
                                 timestamp,
                                 f"RTSP ({rtsp_url}) frame {frame_idx}, approx {frame_idx / int(fps)}s",
                                 confidence=conf,
-                                event_type="violence_detected"
+                                event_type="violence_detected",
+                                alert_number=alert_number
                             )
                             detection_made = True
 
@@ -223,13 +245,15 @@ with tab1:
         st.session_state["rtsp_frame_queue"] = queue.Queue(maxsize=2)
     with col1:
         if st.button("Start RTSP Stream"):
-            if not st.session_state.get("rtsp_running", False) and rtsp_url:
+            if not valid_number:
+                st.error("⚠️ Please enter a valid phone number before starting detection.")
+            elif not st.session_state.get("rtsp_running", False) and rtsp_url:
                 st.session_state["rtsp_running"] = True
                 st.session_state["rtsp_stop_event"].clear()
                 st.session_state["rtsp_frame_queue"] = queue.Queue(maxsize=2)
                 thread = threading.Thread(
                     target=run_rtsp_stream,
-                    args=(rtsp_url, confidence_threshold, st.session_state["rtsp_frame_queue"], st.session_state["rtsp_stop_event"]),
+                    args=(rtsp_url, confidence_threshold, st.session_state["rtsp_frame_queue"], st.session_state["rtsp_stop_event"], alert_number),
                     daemon=True,
                 )
                 with st.spinner("Connecting to stream..."):
@@ -264,66 +288,32 @@ with tab1:
     )
 
     if uploaded_file is not None:
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
+        if not valid_number:
+            st.error("⚠️ Please enter a valid phone number before analyzing files.")
+        else:
+            tfile = tempfile.NamedTemporaryFile(delete=False)
+            tfile.write(uploaded_file.read())
 
-        if uploaded_file.type.startswith("image"):
-            with st.spinner("Analyzing image..."):
-                img = cv2.imread(tfile.name)
-                results = model(img)
-                detection_made = False
-                for r in results:
-                    annotated = r.plot()
-                    st.image(annotated, channels="BGR")
-                    if r.boxes and len(r.boxes) > 0:
-                        for box in r.boxes:
-                            conf = float(box.conf[0]) if hasattr(box, "conf") else None
-                            if conf is not None and conf >= confidence_threshold:
-                                log_incident(
-                                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    uploaded_file.name,
-                                    confidence=conf,
-                                    event_type="violence_detected"
-                                )
-                                detection_made = True
-                if not detection_made:
-                    for key in NO_DETECTION_COUNT:
-                        NO_DETECTION_COUNT[key] += 1
-                        if NO_DETECTION_COUNT[key] >= FRAME_THRESHOLD:
-                            DETECTION_COUNT[key] = 0
-                            ALERT_SENT[key] = False
-                            NO_DETECTION_COUNT[key] = 0
-
-        elif uploaded_file.type.startswith("video"):
-            cap = cv2.VideoCapture(tfile.name)
-            stframe = st.empty()
-            frame_idx = 0
-            fps = cap.get(cv2.CAP_PROP_FPS) or 25
-
-            with st.spinner("Processing video..."):
-                while cap.isOpened():
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-
-                    results = model(frame)
+            if uploaded_file.type.startswith("image"):
+                with st.spinner("Analyzing image..."):
+                    img = cv2.imread(tfile.name)
+                    results = model(img)
                     detection_made = False
                     for r in results:
                         annotated = r.plot()
+                        st.image(annotated, channels="BGR")
                         if r.boxes and len(r.boxes) > 0:
                             for box in r.boxes:
                                 conf = float(box.conf[0]) if hasattr(box, "conf") else None
                                 if conf is not None and conf >= confidence_threshold:
-                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                     log_incident(
-                                        timestamp,
-                                        f"{uploaded_file.name} (frame {frame_idx}, approx {frame_idx/int(fps)}s)",
+                                        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                        uploaded_file.name,
                                         confidence=conf,
-                                        event_type="violence_detected"
+                                        event_type="violence_detected",
+                                        alert_number=alert_number
                                     )
                                     detection_made = True
-                        st.image(annotated, channels="BGR", use_container_width=True)
-
                     if not detection_made:
                         for key in NO_DETECTION_COUNT:
                             NO_DETECTION_COUNT[key] += 1
@@ -332,9 +322,48 @@ with tab1:
                                 ALERT_SENT[key] = False
                                 NO_DETECTION_COUNT[key] = 0
 
-                    frame_idx += 1
+            elif uploaded_file.type.startswith("video"):
+                cap = cv2.VideoCapture(tfile.name)
+                stframe = st.empty()
+                frame_idx = 0
+                fps = cap.get(cv2.CAP_PROP_FPS) or 25
 
-            cap.release()
+                with st.spinner("Processing video..."):
+                    while cap.isOpened():
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+
+                        results = model(frame)
+                        detection_made = False
+                        for r in results:
+                            annotated = r.plot()
+                            if r.boxes and len(r.boxes) > 0:
+                                for box in r.boxes:
+                                    conf = float(box.conf[0]) if hasattr(box, "conf") else None
+                                    if conf is not None and conf >= confidence_threshold:
+                                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        log_incident(
+                                            timestamp,
+                                            f"{uploaded_file.name} (frame {frame_idx}, approx {frame_idx/int(fps)}s)",
+                                            confidence=conf,
+                                            event_type="violence_detected",
+                                            alert_number=alert_number
+                                        )
+                                        detection_made = True
+                            st.image(annotated, channels="BGR", use_container_width=True)
+
+                        if not detection_made:
+                            for key in NO_DETECTION_COUNT:
+                                NO_DETECTION_COUNT[key] += 1
+                                if NO_DETECTION_COUNT[key] >= FRAME_THRESHOLD:
+                                    DETECTION_COUNT[key] = 0
+                                    ALERT_SENT[key] = False
+                                    NO_DETECTION_COUNT[key] = 0
+
+                        frame_idx += 1
+
+                cap.release()
 
 with tab2:
     st.subheader("Incident Table (Last 24h)")
