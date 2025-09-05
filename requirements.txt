@@ -1,3 +1,7 @@
 streamlit
 ultralytics
 opencv-python
+dotenv
+twilio
+boto3
+streamlit_autorefresh
