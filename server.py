@@ -1,4 +1,5 @@
 import threading, time, cv2, base64, tempfile, os, json, boto3, botocore, re, uuid, queue
+import numpy as np
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import StreamingResponse
@@ -65,15 +66,6 @@ def save_logs_to_s3(data):
         ContentType="application/json"
     )
 
-def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
-    if clip_path: entry["clip"] = clip_path
-    if snapshot_key: entry["snapshot"] = snapshot_key
-    logs = load_logs_from_s3()
-    logs.append(entry)
-    save_logs_to_s3(logs)
-
 def generate_presigned_url(key, expires=86400):
     try:
         return s3.generate_presigned_url(
@@ -84,6 +76,18 @@ def generate_presigned_url(key, expires=86400):
     except Exception:
         return None
 
+def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
+
+    if clip_path:
+        entry["clip_url"] = generate_presigned_url(clip_path)
+    if snapshot_key:
+        entry["snapshot_url"] = generate_presigned_url(snapshot_key)
+
+    logs = load_logs_from_s3()
+    logs.append(entry)
+    save_logs_to_s3(logs)
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
         twilio_client.messages.create(
@@ -99,7 +103,24 @@ def send_sms_alert(phone, message):
             
 def detection_loop(stream_id):
     stream = STREAMS[stream_id]
-    cap = cv2.VideoCapture(stream["url"])
+    
+    # Handle file paths - convert to absolute path if it's a local file
+    video_source = stream["url"]
+    if stream.get("is_demo", False) and not video_source.startswith(('http://', 'https://', 'rtsp://')):
+        # It's a local file, make it absolute
+        video_source = os.path.abspath(video_source)
+        print(f"DEBUG: Detection loop - Converted to absolute path: {video_source}")
+        print(f"DEBUG: Detection loop - Absolute path exists: {os.path.exists(video_source)}")
+    
+    cap = cv2.VideoCapture(video_source)
+    
+    # Check if video capture is successful
+    if not cap.isOpened():
+        print(f"ERROR: Detection loop - Could not open video source: {video_source}")
+        # Mark stream as stopped if video source can't be opened
+        STREAMS[stream_id]["running"] = False
+        return
+    
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
     frame_buffer = []
     buffer_size = int(fps * 5)
@@ -111,10 +132,12 @@ def detection_loop(stream_id):
     if stream_id not in FRAME_QUEUES:
         FRAME_QUEUES[stream_id] = queue.Queue()
 
-    while stream["running"]:
+    print(f"DEBUG: Detection loop started for stream {stream_id}")
+
+    while stream.get("running", False):
         ret, frame = cap.read()
         if not ret:
-            time.sleep(0.05)
+            time.sleep(0.1)  # Increased delay for better performance
             continue
 
         # YOLO detection
@@ -228,8 +251,16 @@ def detection_loop(stream_id):
                 except: pass
                 frame_buffer = []
 
+    # Cleanup resources
     cap.release()
-    if out: out.release()
+    if out: 
+        out.release()
+    
+    # Mark stream as stopped when loop ends
+    if stream_id in STREAMS:
+        STREAMS[stream_id]["running"] = False
+    
+    print(f"DEBUG: Detection loop ended for stream {stream_id}")
 
 # -------------------------------
 # WebSocket endpoint
@@ -308,6 +339,9 @@ def add_stream(
         "is_demo": file_uploaded
     }
 
+    print(f"DEBUG: Adding stream {stream_id} with URL: {url_or_file}")
+    
+    # Start detection loop in a new thread
     t = threading.Thread(target=detection_loop, args=(stream_id,), daemon=True)
     t.start()
 
@@ -319,10 +353,67 @@ def get_active_streams():
         {
             "stream_id": s["stream_id"],
             "name": s["name"],
-            "is_demo": s.get("is_demo", False)
+            "is_demo": s.get("is_demo", False),
+            "running": s.get("running", False)
         }
-        for s in STREAMS.values() if s["running"]
+        for s in STREAMS.values()
     ]
+
+@app.post("/stop_stream/{stream_id}")
+def stop_stream(stream_id: str):
+    """Stop a running stream"""
+    if stream_id not in STREAMS:
+        return {"error": "Stream not found"}
+    
+    STREAMS[stream_id]["running"] = False
+    
+    # Clean up resources
+    if stream_id in FRAME_QUEUES:
+        # Clear the queue
+        while not FRAME_QUEUES[stream_id].empty():
+            try:
+                FRAME_QUEUES[stream_id].get_nowait()
+            except:
+                break
+    
+    return {"message": f"Stream {stream_id} stopped successfully"}
+
+@app.post("/start_stream/{stream_id}")
+def start_stream(stream_id: str):
+    """Start a stopped stream"""
+    if stream_id not in STREAMS:
+        return {"error": "Stream not found"}
+    
+    # Always allow restarting - this handles cases where the stream failed to start initially
+    STREAMS[stream_id]["running"] = True
+    
+    # Start detection loop in a new thread
+    t = threading.Thread(target=detection_loop, args=(stream_id,), daemon=True)
+    t.start()
+    
+    print(f"DEBUG: Starting stream {stream_id}")
+    return {"message": f"Stream {stream_id} started successfully"}
+
+@app.delete("/delete_stream/{stream_id}")
+def delete_stream(stream_id: str):
+    """Delete a stream completely"""
+    if stream_id not in STREAMS:
+        return {"error": "Stream not found"}
+    
+    # Stop the stream first
+    STREAMS[stream_id]["running"] = False
+    
+    # Clean up resources
+    if stream_id in FRAME_QUEUES:
+        del FRAME_QUEUES[stream_id]
+    
+    if stream_id in CLIENTS:
+        del CLIENTS[stream_id]
+    
+    # Remove from STREAMS
+    del STREAMS[stream_id]
+    
+    return {"message": f"Stream {stream_id} deleted successfully"}
 
 @app.get("/logs")
 def get_logs():
@@ -343,18 +434,42 @@ def stream_video(stream_id: str):
     
     def generate_video():
         stream = STREAMS[stream_id]
-        cap = cv2.VideoCapture(stream["url"])
+        
+        # Debug: Print the video source URL/path
+        print(f"DEBUG: Attempting to open video source: {stream['url']}")
+        print(f"DEBUG: Current working directory: {os.getcwd()}")
+        print(f"DEBUG: File exists: {os.path.exists(stream['url'])}")
+        
+        # Handle file paths - convert to absolute path if it's a local file
+        video_source = stream["url"]
+        if stream.get("is_demo", False) and not video_source.startswith(('http://', 'https://', 'rtsp://')):
+            # It's a local file, make it absolute
+            video_source = os.path.abspath(video_source)
+            print(f"DEBUG: Converted to absolute path: {video_source}")
+            print(f"DEBUG: Absolute path exists: {os.path.exists(video_source)}")
+        
+        cap = cv2.VideoCapture(video_source)
+        
+        # Check if video capture is successful
+        if not cap.isOpened():
+            print(f"ERROR: Could not open video source: {video_source}")
+            # Create error frame
+            error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(error_frame, f"ERROR: Could not open video source", (50, 240), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            _, buffer = cv2.imencode('.jpg', error_frame)
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            return
         
         # Set video properties
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        # Define codec and create VideoWriter
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter('pipe:', fourcc, fps, (width, height))
+        print(f"DEBUG: Video opened successfully - FPS: {fps}, Size: {width}x{height}")
         
-        while stream["running"]:
+        while stream.get("running", False):
             ret, frame = cap.read()
             if not ret:
                 break
@@ -395,15 +510,12 @@ def stream_video(stream_id: str):
             cv2.putText(frame, timestamp, (10, height - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Write frame to output
-            out.write(frame)
-            
-            # Yield frame data
+            # Yield frame data directly (no VideoWriter needed for streaming)
             _, buffer = cv2.imencode('.jpg', frame)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
         
         cap.release()
-        out.release()
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
+
