@@ -78,11 +78,7 @@ def generate_presigned_url(key, expires=86400):
 
 def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {
-        "timestamp": ts,
-        "stream": stream_name,
-        "confidence": confidence,
-    }
+    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
 
     if clip_path:
         entry["clip_url"] = generate_presigned_url(clip_path)
@@ -92,7 +88,6 @@ def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     logs = load_logs_from_s3()
     logs.append(entry)
     save_logs_to_s3(logs)
-
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
         twilio_client.messages.create(
