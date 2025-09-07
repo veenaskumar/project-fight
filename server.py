@@ -421,39 +421,24 @@ def delete_stream(stream_id: str):
     return {"message": f"Stream {stream_id} deleted successfully"}
 
 @app.get("/logs")
-def get_logs(stream: str = None, sort: str = "desc", start_date: str = None, end_date: str = None):
+def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
 
-    # Filter by stream
+    # Map raw keys to presigned URLs
+    for entry in logs:
+        if "clip" in entry:
+            entry["clip_url"] = generate_presigned_url(entry["clip"])
+        if "snapshot" in entry:
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
+
+    # Filter by stream name
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
-    # Filter by start_date
-    if start_date:
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
-            logs = [
-                l for l in logs
-                if "timestamp" in l and datetime.strptime(l["timestamp"], "%Y-%m-%d %H:%M:%S") >= start_dt
-            ]
-        except:
-            pass
-
-    # Filter by end_date
-    if end_date:
-        try:
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
-            logs = [
-                l for l in logs
-                if "timestamp" in l and datetime.strptime(l["timestamp"], "%Y-%m-%d %H:%M:%S") <= end_dt
-            ]
-        except:
-            pass
-
-    # Sort logs
+    # Sort by timestamp
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
-    return logs
 
+    return logs
 
 
 @app.get("/video/{stream_id}")

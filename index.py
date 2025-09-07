@@ -558,27 +558,16 @@ with tabs[2]:
 # -------------------------------
 # 4️⃣ Detection Clips Tab
 # -------------------------------
-# -------------------------------
-# 4️⃣ Detection Clips Tab
-# -------------------------------
 with tabs[3]:
     st.header("Detection Clips")
 
     stream_filter = st.text_input("Filter by Stream (optional)")
     sort_order = st.selectbox("Sort Order", ["Newest First", "Oldest First"])
 
-    # New: Date filters
-    start_date = st.text_input("Start Date (YYYY-MM-DD HH:MM:SS)", "")
-    end_date = st.text_input("End Date (YYYY-MM-DD HH:MM:SS)", "")
-
     sort_param = "desc" if sort_order == "Newest First" else "asc"
     params = {"sort": sort_param}
     if stream_filter:
         params["stream"] = stream_filter
-    if start_date:
-        params["start_date"] = start_date
-    if end_date:
-        params["end_date"] = end_date
 
     try:
         resp = requests.get(f"{BACKEND_URL}/logs", params=params, timeout=10)
@@ -610,7 +599,6 @@ with tabs[3]:
                     cols[1].video(entry["clip_url"])
                 else:
                     cols[1].warning("No video clip available")
-
 
 
 
