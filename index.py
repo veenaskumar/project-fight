@@ -560,32 +560,50 @@ with tabs[2]:
 # -------------------------------
 with tabs[3]:
     st.header("Detection Clips")
-    # Fetch logs from backend S3
+
+    # --- Filters ---
+    stream_filter = st.text_input("Filter by Stream (optional)")
+    sort_order = st.selectbox("Sort Order", ["Newest First", "Oldest First"])
+
+    sort_param = "desc" if sort_order == "Newest First" else "asc"
+    params = {"sort": sort_param}
+    if stream_filter:
+        params["stream"] = stream_filter
+
+    # --- Fetch logs from backend ---
     try:
-        logs_resp = requests.get(f"{BACKEND_URL}/logs")  # Implement /logs endpoint in backend
+        logs_resp = requests.get(f"{BACKEND_URL}/logs", params=params, timeout=10)
         logs = logs_resp.json() if logs_resp.ok else []
-    except:
+    except Exception as e:
+        st.error(f"Failed to fetch logs: {e}")
         logs = []
 
-    for entry in logs[::-1]:  # show latest first
-        ts = entry.get("timestamp")
-        stream_name = entry.get("stream")
-        conf = entry.get("confidence")
-        clip = entry.get("clip")
-        snapshot = entry.get("snapshot")
+    if not logs:
+        st.info("No detection clips available yet.")
+    else:
+        for entry in logs:
+            ts = entry.get("timestamp", "N/A")
+            stream_name = entry.get("stream", "Unknown")
+            conf = entry.get("confidence", 0.0)
+            clip_url = entry.get("clip_url")
+            snapshot_url = entry.get("snapshot_url")
 
-        st.subheader(f"{stream_name} - {ts} - Confidence: {conf:.2f}")
-        cols = st.columns(2)
-        if snapshot:
-            try:
-                resp = requests.get(snapshot)
-                content_type = resp.headers.get("Content-Type", "")
-                if resp.ok and content_type.startswith("image"):
-                    cols[0].image(resp.content, caption="Snapshot")
+            with st.container(border=True):
+                st.subheader(f"{stream_name} - {ts}")
+                st.markdown(f"**Confidence:** {conf:.2f}")
+
+                cols = st.columns(2)
+
+                # Snapshot
+                if snapshot_url:
+                    cols[0].image(snapshot_url, caption="Snapshot")
                 else:
-                    cols[0].warning(f"Snapshot not available or invalid. Content-Type: {content_type}")
-            except Exception as e:
-                cols[0].error(f"Failed to load snapshot: {e}")
-        if clip:
-            cols[1].video(requests.get(clip).content, format="video/mp4")
+                    cols[0].warning("No snapshot available")
+
+                # Clip
+                if clip_url:
+                    cols[1].video(clip_url)
+                else:
+                    cols[1].warning("No video clip available")
+
 

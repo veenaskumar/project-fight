@@ -416,15 +416,25 @@ def delete_stream(stream_id: str):
     return {"message": f"Stream {stream_id} deleted successfully"}
 
 @app.get("/logs")
-def get_logs():
+def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
-    # Generate presigned URLs for clips/snapshots
+
+    # Generate presigned URLs
     for entry in logs:
-        if "clip" in entry:
-            entry["clip"] = generate_presigned_url(entry["clip"])
-        if "snapshot" in entry:
-            entry["snapshot"] = generate_presigned_url(entry["snapshot"])
+        if "clip_url" in entry:
+            entry["clip_url"] = generate_presigned_url(entry["clip_url"])
+        if "snapshot_url" in entry:
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot_url"])
+
+    # Filter by stream
+    if stream:
+        logs = [l for l in logs if l.get("stream") == stream]
+
+    # Sort by timestamp
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
+
     return logs
+
 
 @app.get("/video/{stream_id}")
 def stream_video(stream_id: str):
