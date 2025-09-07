@@ -576,29 +576,46 @@ with tabs[3]:
         st.error(f"Error fetching logs: {e}")
         logs = []
 
+    # Apply client-side, case-insensitive substring filter on stream name
+    if stream_filter:
+        needle = stream_filter.strip().lower()
+        logs = [l for l in logs if needle in (l.get("stream", "").lower())]
+
+    # Client-side sort by parsed timestamp to ensure correct ordering
+    from datetime import datetime as _dt
+    def _parse_ts(s: str):
+        fmts = [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%d-%m-%Y %H:%M:%S",
+        ]
+        for f in fmts:
+            try:
+                return _dt.strptime((s or "").strip(), f)
+            except Exception:
+                continue
+        return _dt.min
+
+    logs.sort(key=lambda x: _parse_ts(x.get("timestamp")), reverse=(sort_order == "Newest First"))
+
     if not logs:
         st.info("No detection clips available.")
     else:
+        rows = []
         for entry in logs:
             ts = entry.get("timestamp", "N/A")
             stream_name = entry.get("stream", "Unknown")
             conf = entry.get("confidence", 0.0)
-
-            with st.container(border=True):
-                st.subheader(f"{stream_name} - {ts}")
-                st.markdown(f"**Confidence:** {conf:.2f}")
-
-                cols = st.columns(2)
-
-                if entry.get("snapshot_url"):
-                    cols[0].image(entry["snapshot_url"], caption="Snapshot")
-                else:
-                    cols[0].warning("No snapshot available")
-
-                if entry.get("clip_url"):
-                    cols[1].video(entry["clip_url"])
-                else:
-                    cols[1].warning("No video clip available")
+            rows.append({"Time": ts, "Stream": stream_name, "Confidence": round(conf, 2)})
+        # Render centered markdown table
+        table_lines = [
+            "| Time | Stream | Confidence |",
+            "|:---:|:---:|:---:|",
+        ]
+        for r in rows:
+            table_lines.append(f"| {r['Time']} | {r['Stream']} | {r['Confidence']} |")
+        st.markdown("\n".join(table_lines))
 
 
 
