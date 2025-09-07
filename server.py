@@ -419,16 +419,16 @@ def delete_stream(stream_id: str):
 def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
 
-    # Generate presigned URLs
+    # Map raw keys to presigned URLs
     for entry in logs:
-        if "clip_url" in entry:
-            entry["clip_url"] = generate_presigned_url(entry["clip_url"])
-        if "snapshot_url" in entry:
-            entry["snapshot_url"] = generate_presigned_url(entry["snapshot_url"])
+        if "clip" in entry:
+            entry["clip_url"] = generate_presigned_url(entry["clip"])
+        if "snapshot" in entry:
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
 
-    # Filter by stream
+    # Filter by stream name
     if stream:
-        logs = [l for l in logs if l.get("stream") == stream]
+        logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
     # Sort by timestamp
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))

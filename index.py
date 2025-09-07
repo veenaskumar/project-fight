@@ -561,7 +561,6 @@ with tabs[2]:
 with tabs[3]:
     st.header("Detection Clips")
 
-    # --- Filters ---
     stream_filter = st.text_input("Filter by Stream (optional)")
     sort_order = st.selectbox("Sort Order", ["Newest First", "Oldest First"])
 
@@ -570,23 +569,20 @@ with tabs[3]:
     if stream_filter:
         params["stream"] = stream_filter
 
-    # --- Fetch logs from backend ---
     try:
-        logs_resp = requests.get(f"{BACKEND_URL}/logs", params=params, timeout=10)
-        logs = logs_resp.json() if logs_resp.ok else []
+        resp = requests.get(f"{BACKEND_URL}/logs", params=params, timeout=10)
+        logs = resp.json() if resp.ok else []
     except Exception as e:
-        st.error(f"Failed to fetch logs: {e}")
+        st.error(f"Error fetching logs: {e}")
         logs = []
 
     if not logs:
-        st.info("No detection clips available yet.")
+        st.info("No detection clips available.")
     else:
         for entry in logs:
             ts = entry.get("timestamp", "N/A")
             stream_name = entry.get("stream", "Unknown")
             conf = entry.get("confidence", 0.0)
-            clip_url = entry.get("clip_url")
-            snapshot_url = entry.get("snapshot_url")
 
             with st.container(border=True):
                 st.subheader(f"{stream_name} - {ts}")
@@ -594,16 +590,15 @@ with tabs[3]:
 
                 cols = st.columns(2)
 
-                # Snapshot
-                if snapshot_url:
-                    cols[0].image(snapshot_url, caption="Snapshot")
+                if entry.get("snapshot_url"):
+                    cols[0].image(entry["snapshot_url"], caption="Snapshot")
                 else:
                     cols[0].warning("No snapshot available")
 
-                # Clip
-                if clip_url:
-                    cols[1].video(clip_url)
+                if entry.get("clip_url"):
+                    cols[1].video(entry["clip_url"])
                 else:
                     cols[1].warning("No video clip available")
+
 
 
