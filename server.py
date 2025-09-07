@@ -78,7 +78,11 @@ def generate_presigned_url(key, expires=86400):
 
 def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
+    entry = {
+        "timestamp": ts,
+        "stream": stream_name,
+        "confidence": confidence,
+    }
 
     if clip_path:
         entry["clip_url"] = generate_presigned_url(clip_path)
@@ -88,6 +92,7 @@ def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     logs = load_logs_from_s3()
     logs.append(entry)
     save_logs_to_s3(logs)
+
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
         twilio_client.messages.create(
@@ -416,24 +421,39 @@ def delete_stream(stream_id: str):
     return {"message": f"Stream {stream_id} deleted successfully"}
 
 @app.get("/logs")
-def get_logs(stream: str = None, sort: str = "desc"):
+def get_logs(stream: str = None, sort: str = "desc", start_date: str = None, end_date: str = None):
     logs = load_logs_from_s3()
 
-    # Map raw keys to presigned URLs
-    for entry in logs:
-        if "clip" in entry:
-            entry["clip_url"] = generate_presigned_url(entry["clip"])
-        if "snapshot" in entry:
-            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
-
-    # Filter by stream name
+    # Filter by stream
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
-    # Sort by timestamp
-    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
+    # Filter by start_date
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
+            logs = [
+                l for l in logs
+                if "timestamp" in l and datetime.strptime(l["timestamp"], "%Y-%m-%d %H:%M:%S") >= start_dt
+            ]
+        except:
+            pass
 
+    # Filter by end_date
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+            logs = [
+                l for l in logs
+                if "timestamp" in l and datetime.strptime(l["timestamp"], "%Y-%m-%d %H:%M:%S") <= end_dt
+            ]
+        except:
+            pass
+
+    # Sort logs
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
     return logs
+
 
 
 @app.get("/video/{stream_id}")
