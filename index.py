@@ -602,20 +602,36 @@ with tabs[3]:
     if not logs:
         st.info("No detection clips available.")
     else:
-        rows = []
         for entry in logs:
             ts = entry.get("timestamp", "N/A")
             stream_name = entry.get("stream", "Unknown")
-            conf = entry.get("confidence", 0.0)
-            rows.append({"Time": ts, "Stream": stream_name, "Confidence": round(conf, 2)})
-        # Render centered markdown table
-        table_lines = [
-            "| Time | Stream | Confidence |",
-            "|:---:|:---:|:---:|",
-        ]
-        for r in rows:
-            table_lines.append(f"| {r['Time']} | {r['Stream']} | {r['Confidence']} |")
-        st.markdown("\n".join(table_lines))
+            conf = round(entry.get("confidence", 0.0), 2)
+            clip_url = entry.get("clip_url")
+            snapshot_url = entry.get("snapshot_url")
+
+            with st.container():
+                st.markdown(f"### 📌 {stream_name} - {ts}")
+                st.write(f"**Confidence:** {conf}")
+
+                cols = st.columns(2)
+
+                # Snapshot preview
+                with cols[0]:
+                    if snapshot_url:
+                        st.image(snapshot_url, caption="Snapshot", use_container_width=True)
+                    else:
+                        st.warning("No snapshot available")
+
+                # Clip preview
+                with cols[1]:
+                    if clip_url:
+                        st.video(clip_url)
+                        st.markdown(f"[🔗 Download Clip]({clip_url})", unsafe_allow_html=True)
+                    else:
+                        st.warning("No clip available")
+
+                st.markdown("---")
+
 
 
 
