@@ -432,6 +432,10 @@ def get_logs(stream: str = None, sort: str = "desc"):
 
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
 
+    # 👇 Debug print
+    import json
+    print("DEBUG /logs returning:", json.dumps(logs, indent=2))
+
     return logs
 
 
