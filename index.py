@@ -606,10 +606,8 @@ with tabs[3]:
             ts = entry.get("timestamp", "N/A")
             stream_name = entry.get("stream", "Unknown")
             conf = round(entry.get("confidence", 0.0), 2)
-
-            # Support both "clip/snapshot" and "clip_url/snapshot_url"
-            clip_url = entry.get("clip_url") or (generate_presigned_url(entry["clip"]) if entry.get("clip") else None)
-            snapshot_url = entry.get("snapshot_url") or (generate_presigned_url(entry["snapshot"]) if entry.get("snapshot") else None)
+            clip_url = entry.get("clip_url")
+            snapshot_url = entry.get("snapshot_url")
 
             with st.container():
                 st.markdown(f"### 📌 {stream_name} - {ts}")
