@@ -81,15 +81,14 @@ def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
 
     if clip_path:
-        entry["clip"] = clip_path
-        entry["clip_url"] = generate_presigned_url(clip_path)
+        entry["clip"] = clip_path   
     if snapshot_key:
         entry["snapshot"] = snapshot_key
-        entry["snapshot_url"] = generate_presigned_url(snapshot_key)
 
     logs = load_logs_from_s3()
     logs.append(entry)
     save_logs_to_s3(logs)
+
 
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
@@ -422,21 +421,19 @@ def delete_stream(stream_id: str):
 def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
 
-    # Ensure all entries have URLs
     for entry in logs:
-        if "clip" in entry and not entry.get("clip_url"):
+        if entry.get("clip"):
             entry["clip_url"] = generate_presigned_url(entry["clip"])
-        if "snapshot" in entry and not entry.get("snapshot_url"):
+        if entry.get("snapshot"):
             entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
 
-    # Filter by stream name
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
-    # Sort by timestamp
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
 
     return logs
+
 
 
 
