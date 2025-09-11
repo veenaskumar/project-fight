@@ -86,8 +86,13 @@ def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
 
     if clip_path:
-        entry["clip"] = clip_path   
+        if clip_path.startswith("http"):
+            clip_path = clip_path.split(".amazonaws.com/")[-1].split("?")[0]
+        entry["clip"] = clip_path
+
     if snapshot_key:
+        if snapshot_key.startswith("http"):
+            snapshot_key = snapshot_key.split(".amazonaws.com/")[-1].split("?")[0]
         entry["snapshot"] = snapshot_key
 
     logs = load_logs_from_s3()
@@ -428,20 +433,16 @@ def get_logs(stream: str = None, sort: str = "desc"):
 
     for entry in logs:
         if entry.get("clip"):
-            entry["clip_url"] = generate_presigned_url(entry["clip"])
+            entry["clip_url"] = generate_presigned_url(entry["clip"], expires=86400)
         if entry.get("snapshot"):
-            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
 
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
-
-    # 👇 Debug print
-    import json
-    print("DEBUG /logs returning:", json.dumps(logs, indent=2))
-
     return logs
+
 
 
 
