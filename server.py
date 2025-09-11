@@ -25,7 +25,12 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH) if TWILIO_SID and TWILIO_AUTH else None
 
 # AWS S3
-s3 = boto3.client("s3")
+s3 = boto3.client(
+    "s3",
+    region_name="eu-west-2",
+    config=botocore.client.Config(signature_version="s3v4")
+)
+
 
 # YOLO model
 model = YOLO("violence_detection_v4.pt")
