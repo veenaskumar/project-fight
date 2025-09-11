@@ -78,8 +78,10 @@ def generate_presigned_url(key, expires=86400):
             Params={"Bucket": S3_BUCKET, "Key": key},
             ExpiresIn=expires
         )
-    except Exception:
+    except Exception as e:
+        print(f"Presigned URL generation failed for {key}: {e}", flush=True)
         return None
+
 
 def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -239,10 +241,19 @@ def detection_loop(stream_id):
             snapshot_path = f"{stream_id}_{int(time.time())}.jpg"
             cv2.imwrite(snapshot_path, frame)
             s3_key_snapshot = f"snapshots/{Path(snapshot_path).name}"
-            try: s3.upload_file(snapshot_path, S3_BUCKET, s3_key_snapshot)
-            except: pass
-            try: os.remove(snapshot_path)
-            except: pass
+            try:
+                s3.upload_file(
+                    snapshot_path,
+                    S3_BUCKET,
+                    s3_key_snapshot,
+                    ExtraArgs={"ContentType": "image/jpeg"}
+                )
+            except Exception as e:
+                print(f"Failed to upload snapshot {snapshot_path} -> {s3_key_snapshot}: {e}", flush=True)
+            finally:
+                try: os.remove(snapshot_path)
+                except Exception as e:
+                    print(f"Failed to remove temp snapshot {snapshot_path}: {e}", flush=True)
 
             send_sms_alert(
                 stream["phone"],
@@ -256,11 +267,19 @@ def detection_loop(stream_id):
                 recording = False
                 s3_key = f"clips/{Path(clip_path).name}"
                 try:
-                    s3.upload_file(clip_path, S3_BUCKET, s3_key)
+                    s3.upload_file(
+                        clip_path,
+                        S3_BUCKET,
+                        s3_key,
+                        ExtraArgs={"ContentType": "video/mp4"}
+                    )
                     log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
-                except: pass
-                try: os.remove(clip_path)
-                except: pass
+                except Exception as e:
+                    print(f"Failed to upload clip {clip_path} -> {s3_key}: {e}", flush=True)
+                finally:
+                    try: os.remove(clip_path)
+                    except Exception as e:
+                        print(f"Failed to remove temp clip {clip_path}: {e}", flush=True)
                 frame_buffer = []
 
     # Cleanup resources
