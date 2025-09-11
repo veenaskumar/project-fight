@@ -447,21 +447,6 @@ def delete_stream(stream_id: str):
     
     return {"message": f"Stream {stream_id} deleted successfully"}
 
-@app.get("/logs")
-def get_logs(stream: str = None, sort: str = "desc"):
-    logs = load_logs_from_s3()
-
-    for entry in logs:
-        if entry.get("clip"):
-            entry["clip_url"] = f"{S3_BASE_URL}/{entry['clip']}"
-        if entry.get("snapshot"):
-            entry["snapshot_url"] = f"{S3_BASE_URL}/{entry['snapshot']}"
-
-    if stream:
-        logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
-
-    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
-    return logs
 
 
 
