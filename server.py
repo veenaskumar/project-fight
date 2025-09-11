@@ -453,8 +453,11 @@ def get_logs(stream: str = None, sort: str = "desc"):
     for entry in logs:
         if entry.get("clip"):
             entry["clip_url"] = generate_presigned_url(entry["clip"], expires=86400)
+            print(f"Generated clip URL: {entry['clip_url']}", flush=True)
         if entry.get("snapshot"):
             entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
+            print(f"Generated snapshot URL: {entry['snapshot_url']}", flush=True)
+
 
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
