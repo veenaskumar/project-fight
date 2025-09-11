@@ -458,18 +458,12 @@ def get_logs(stream: str = None, sort: str = "desc"):
             entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
             print(f"Generated snapshot URL: {entry['snapshot_url']}", flush=True)
 
-
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
     return logs
 
-import sys, logging
-
-logger = logging.getLogger("uvicorn")  # use uvicorn logger
-def log(msg):
-    logger.info(msg)   # will show inside uvicorn.log
 
 
 @app.get("/video/{stream_id}")
