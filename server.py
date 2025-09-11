@@ -17,6 +17,7 @@ BASE_DIR = Path(os.getcwd())
 
 S3_BUCKET = "violence-detector-bucket"
 S3_KEY = "logs/violence_detection_log.json"
+S3_BASE_URL = f"https://{S3_BUCKET}.s3.eu-west-2.amazonaws.com"
 
 # Twilio
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -452,11 +453,9 @@ def get_logs(stream: str = None, sort: str = "desc"):
 
     for entry in logs:
         if entry.get("clip"):
-            entry["clip_url"] = generate_presigned_url(entry["clip"], expires=86400)
-            print(f"Generated clip URL: {entry['clip_url']}", flush=True)
+            entry["clip_url"] = f"{S3_BASE_URL}/{entry['clip']}"
         if entry.get("snapshot"):
-            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
-            print(f"Generated snapshot URL: {entry['snapshot_url']}", flush=True)
+            entry["snapshot_url"] = f"{S3_BASE_URL}/{entry['snapshot']}"
 
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
