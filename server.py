@@ -17,7 +17,6 @@ BASE_DIR = Path(os.getcwd())
 
 S3_BUCKET = "violence-detector-bucket"
 S3_KEY = "logs/violence_detection_log.json"
-S3_BASE_URL = f"https://{S3_BUCKET}.s3.eu-west-2.amazonaws.com"
 
 # Twilio
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -447,6 +446,23 @@ def delete_stream(stream_id: str):
     
     return {"message": f"Stream {stream_id} deleted successfully"}
 
+@app.get("/logs")
+def get_logs(stream: str = None, sort: str = "desc"):
+    logs = load_logs_from_s3()
+
+    for entry in logs:
+        if entry.get("clip"):
+            entry["clip_url"] = generate_presigned_url(entry["clip"], expires=86400)
+            print(f"Generated clip URL: {entry['clip_url']}", flush=True)
+        if entry.get("snapshot"):
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
+            print(f"Generated snapshot URL: {entry['snapshot_url']}", flush=True)
+
+    if stream:
+        logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
+
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
+    return logs
 
 
 
