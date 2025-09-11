@@ -465,9 +465,11 @@ def get_logs(stream: str = None, sort: str = "desc"):
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
     return logs
 
+import sys, logging
 
-
-
+logger = logging.getLogger("uvicorn")  # use uvicorn logger
+def log(msg):
+    logger.info(msg)   # will show inside uvicorn.log
 
 
 @app.get("/video/{stream_id}")
