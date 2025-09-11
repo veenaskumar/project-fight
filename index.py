@@ -617,7 +617,6 @@ with tabs[3]:
 
                 # Snapshot preview
                 with cols[0]:
-                    st.write(f"Clip URL: {clip_url}")
                     if snapshot_url:
                         st.image(snapshot_url, caption="Snapshot", use_container_width=True)
                     else:
@@ -625,7 +624,6 @@ with tabs[3]:
 
                 # Clip preview
                 with cols[1]:
-                    st.write(f"Snapshot URL: {snapshot_url}")
                     if clip_url:
                         st.video(clip_url)
                         st.markdown(f"[🔗 Download Clip]({clip_url})", unsafe_allow_html=True)
