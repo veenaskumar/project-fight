@@ -633,7 +633,7 @@ with tabs[3]:
                             else:
                                 st.warning("Clip expired or deleted")
                         except:
-                            st.warning("Clip expired or deleted")
+                            st.warning("Clip not found")
 
                 st.markdown("---")
 
