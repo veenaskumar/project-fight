@@ -627,6 +627,7 @@ with tabs[3]:
                     if clip_url:
                         try:
                             resp = requests.head(clip_url, timeout=5)
+                            print(resp)
                             if resp.status_code == 200:
                                 st.video(clip_url)
                                 st.markdown(f"[🔗 Download Clip]({clip_url})", unsafe_allow_html=True)
