@@ -629,7 +629,9 @@ with tabs[3]:
                             resp = requests.get(clip_url, timeout=5)
                             print(resp)
                             if resp.status_code == 200:
-                                st.video(clip_url)
+                                 st.markdown(f"""
+                                    <video width="100%" height="400" controls>
+                                    <source src="{clip_url}" type="video/mp4">Your browser does not support the video tag.</video>""", unsafe_allow_html=True))
                                 st.markdown(f"[🔗 Download Clip]({clip_url})", unsafe_allow_html=True)
                             else:
                                 st.warning("Clip expired or deleted")
