@@ -626,7 +626,7 @@ with tabs[3]:
                 with cols[1]:
                     if clip_url:
                         try:
-                            resp = requests.head(clip_url, timeout=5)
+                            resp = requests.get(clip_url, timeout=5)
                             print(resp)
                             if resp.status_code == 200:
                                 st.video(clip_url)
