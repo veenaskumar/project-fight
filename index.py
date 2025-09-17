@@ -629,7 +629,7 @@ with tabs[3]:
                             resp = requests.get(clip_url, timeout=5)
                             print(resp)
                             if resp.status_code == 200:
-                                st.video(clip_url)
+                                st.video(resp.content, format="video/mp4", start_time=0)
                                 st.download_button(
                                     label="⬇️ Download Clip",
                                     data=resp.content,
