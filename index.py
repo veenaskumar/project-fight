@@ -630,7 +630,17 @@ with tabs[3]:
                             print(resp)
                             if resp.status_code == 200:
                                 st.video(clip_url)
-                                st.markdown(f"[🔗 Download Clip]({clip_url})", unsafe_allow_html=True)
+                                st.markdown(
+                                    f"""
+                                    <a href="{clip_url}" download="clip.mp4">
+                                        <button style="background-color:#ff4444;color:white;padding:8px 16px;border:none;border-radius:5px;cursor:pointer;">
+                                            ⬇️ Download Clip
+                                        </button>
+                                    </a>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
+
                             else:
                                 st.warning("Clip expired or deleted")
                         except:
