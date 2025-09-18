@@ -625,7 +625,7 @@ with tabs[3]:
                     if clip_url:
                         try:
                             # First check if clip exists
-                            head_resp = requests.head(clip_url, timeout=5)
+                            head_resp = requests.get(clip_url, timeout=5)
                             if head_resp.status_code == 200:
                                 # Now fetch the actual clip only if it exists
                                 resp = requests.get(clip_url, timeout=30)
