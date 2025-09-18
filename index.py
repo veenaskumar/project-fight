@@ -624,20 +624,25 @@ with tabs[3]:
 
                     if clip_url:
                         try:
-                            resp = requests.get(clip_url, timeout=5)
-                            print(resp)
-                            if resp.status_code == 200:
-                                st.download_button(
-                                    label="⬇️ Download Clip",
-                                    data=resp.content,
-                                    file_name="clip.mp4",
-                                    mime="video/mp4"
-                                )
-
+                            # First check if clip exists
+                            head_resp = requests.head(clip_url, timeout=5)
+                            if head_resp.status_code == 200:
+                                # Now fetch the actual clip only if it exists
+                                resp = requests.get(clip_url, timeout=30)
+                                if resp.status_code == 200:
+                                    st.download_button(
+                                        label="⬇️ Download Clip",
+                                        data=resp.content,
+                                        file_name=f"{stream_name}_{ts}.mp4",
+                                        mime="video/mp4"
+                                    )
+                                else:
+                                    st.warning("Clip expired or deleted")
                             else:
                                 st.warning("Clip expired or deleted")
-                        except:
-                            st.warning("Clip not found")
+                        except Exception as e:
+                            st.warning(f"Clip not found: {e}")
+
 
                 st.markdown("---")
 
