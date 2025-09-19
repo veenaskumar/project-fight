@@ -31,6 +31,8 @@ s3 = boto3.client(
     config=botocore.client.Config(signature_version="s3v4")
 )
 
+ID2CLASS = {0: "violence", 1: "nonviolence", 2: "fall"}
+
 
 # YOLO model
 model = YOLO("violence_detection_v4.pt")
@@ -164,7 +166,7 @@ def detection_loop(stream_id):
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
                     cls_id = int(box.cls[0].item())
-                    cls_name = results.names[cls_id]
+                    cls_name = ID2CLASS.get(cls_id, "unknown")
 
                     if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -529,7 +531,7 @@ def stream_video(stream_id: str):
                     for box in results.boxes:
                         conf = float(box.conf[0].item())
                         cls_id = int(box.cls[0].item())
-                        cls_name = results.names[cls_id]
+                        cls_name = ID2CLASS.get(cls_id, "unknown")
 
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
