@@ -32,6 +32,8 @@ s3 = boto3.client(
 )
 
 ID2CLASS = {0: "violence", 1: "nonviolence", 2: "fall"}
+def get_class_name(cls_id: int) -> str:
+    return ID2CLASS.get(cls_id, f"class_{cls_id}")
 
 
 # YOLO model
@@ -166,7 +168,7 @@ def detection_loop(stream_id):
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
                     cls_id = int(box.cls[0].item())
-                    cls_name = ID2CLASS.get(cls_id, "unknown")
+                    cls_name = get_class_name(cls_id)
 
                     if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -531,7 +533,7 @@ def stream_video(stream_id: str):
                     for box in results.boxes:
                         conf = float(box.conf[0].item())
                         cls_id = int(box.cls[0].item())
-                        cls_name = ID2CLASS.get(cls_id, "unknown")
+                        cls_name = get_class_name(cls_id)
 
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
