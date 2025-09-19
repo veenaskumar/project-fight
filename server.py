@@ -163,13 +163,17 @@ def detection_loop(stream_id):
             if results.boxes is not None:
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
-                    if conf >= 0.3:  # Only show boxes with confidence > 0.3
+                    cls_id = int(box.cls[0].item())
+                    cls_name = results.names[cls_id]
+
+                    if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        # Draw bounding box
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0) if conf < stream["threshold"] else (0, 0, 255), 2)
-                        # Draw confidence label
-                        label = f"{'VIOLENCE' if conf >= stream['threshold'] else 'SAFE'}: {conf:.2f}"
-                        cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                        color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        label = f"{cls_name.upper()} {conf:.2f}"
+                        cv2.putText(frame, label, (x1, y1-10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
         except:
             confidence = 0.0
 
@@ -520,16 +524,21 @@ def stream_video(stream_id: str):
                 confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
                 
                 # Draw bounding boxes for detected objects
+                # Draw bounding boxes for detected objects
                 if results.boxes is not None:
                     for box in results.boxes:
                         conf = float(box.conf[0].item())
+                        cls_id = int(box.cls[0].item())
+                        cls_name = results.names[cls_id]
+
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            # Draw bounding box
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0) if conf < stream["threshold"] else (0, 0, 255), 2)
-                            # Draw confidence label
-                            label = f"{'VIOLENCE' if conf >= stream['threshold'] else 'SAFE'}: {conf:.2f}"
-                            cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                            color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                            label = f"{cls_name.upper()} {conf:.2f}"
+                            cv2.putText(frame, label, (x1, y1-10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
             except:
                 confidence = 0.0
             
