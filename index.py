@@ -524,7 +524,8 @@ with tabs[2]:
                     
                     # Main video player
                     st.markdown("### 📹 Live Video Feed")
-                    run_ws_preview(selected_stream_id)
+                    if st.button("▶️ Start Live Preview"):
+                        run_ws_preview(selected_stream_id)
             
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
