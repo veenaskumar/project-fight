@@ -100,21 +100,6 @@ def run_ws_preview(stream_id):
             frame_container.image(frame, channels="BGR")
         except Exception as e:
             st.write(f"Connection closed: {e}")
-            breakdef run_ws_preview(stream_id):
-    ws_url = f"ws://localhost:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
-    ws = websocket.WebSocket()
-    ws.connect(ws_url)
-    frame_container = st.empty()
-
-    while True:
-        try:
-            data = ws.recv()
-            img_bytes = base64.b64decode(data)
-            nparr = np.frombuffer(img_bytes, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            frame_container.image(frame, channels="BGR")
-        except Exception as e:
-            st.write(f"Connection closed: {e}")
             break
 # -------------------------------
 # Header with Logo
@@ -539,8 +524,7 @@ with tabs[2]:
                     
                     # Main video player
                     st.markdown("### 📹 Live Video Feed")
-                    if st.button("▶️ Start Live Preview"):
-                        run_ws_preview(selected_stream_id)
+                    run_ws_preview(selected_stream["id"])
             
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
