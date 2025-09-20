@@ -281,7 +281,8 @@ def detection_loop(stream_id):
                         s3_key,
                         ExtraArgs={"ContentType": "video/mp4"}
                     )
-                    log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
+                    if any(c in ["violence", "fall"] for c in detected_classes):
+                        log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
                 except Exception as e:
                     print(f"Failed to upload clip {clip_path} -> {s3_key}: {e}", flush=True)
                 finally:

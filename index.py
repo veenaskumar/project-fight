@@ -85,6 +85,37 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def run_ws_preview(stream_id):
+    ws_url = f"ws://localhost:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
+    ws = websocket.WebSocket()
+    ws.connect(ws_url)
+    frame_container = st.empty()
+
+    while True:
+        try:
+            data = ws.recv()
+            img_bytes = base64.b64decode(data)
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            frame_container.image(frame, channels="BGR")
+        except Exception as e:
+            st.write(f"Connection closed: {e}")
+            breakdef run_ws_preview(stream_id):
+    ws_url = f"ws://localhost:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
+    ws = websocket.WebSocket()
+    ws.connect(ws_url)
+    frame_container = st.empty()
+
+    while True:
+        try:
+            data = ws.recv()
+            img_bytes = base64.b64decode(data)
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            frame_container.image(frame, channels="BGR")
+        except Exception as e:
+            st.write(f"Connection closed: {e}")
+            break
 # -------------------------------
 # Header with Logo
 # -------------------------------
@@ -508,14 +539,7 @@ with tabs[2]:
                     
                     # Main video player
                     st.markdown("### 📹 Live Video Feed")
-                    st.markdown(f"""
-                    <div style="text-align: center; margin: 20px 0;">
-                        <img src="{video_url}" width="100%" height="500"
-                            style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); background: #000;"
-                            alt="Live Stream"/>
-                    </div>
-                    """, unsafe_allow_html=True)
-
+                    run_ws_preview(selected_stream["id"])
             
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
