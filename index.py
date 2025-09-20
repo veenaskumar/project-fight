@@ -510,12 +510,12 @@ with tabs[2]:
                     st.markdown("### 📹 Live Video Feed")
                     st.markdown(f"""
                     <div style="text-align: center; margin: 20px 0;">
-                        <video width="100%" height="500" controls autoplay muted loop style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); background: #000;">
-                            <source src="{video_url}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
+                        <img src="{video_url}" width="100%" height="500"
+                            style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); background: #000;"
+                            alt="Live Stream"/>
                     </div>
                     """, unsafe_allow_html=True)
+
             
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
