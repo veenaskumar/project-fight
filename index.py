@@ -5,7 +5,7 @@ from pathlib import Path
 from io import BytesIO
 import threading
 import asyncio
-import websockets
+import websocket
 from datetime import datetime
 
 BACKEND_URL = "http://18.170.163.99:8000"
