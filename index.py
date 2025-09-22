@@ -531,7 +531,8 @@ with tabs[2]:
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
                     st.markdown(f"""
                     <div style="text-align: center; border: 2px solid #ddd; border-radius: 10px; padding: 10px; background: #f8f9fa;">
-                        <img src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
+                        <video src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
+                        <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
