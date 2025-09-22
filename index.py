@@ -86,7 +86,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def run_ws_preview(stream_id):
-    ws_url = f"ws://localhost:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
+    ws_url = f"ws://18.170.163.99:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
     ws = websocket.WebSocket()
     ws.connect(ws_url)
     frame_container = st.empty()
@@ -523,9 +523,9 @@ with tabs[2]:
                     video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
                     
                     # Main video player
-                    # st.markdown("### 📹 Live Video Feed")
-                    # if st.button("▶️ Start Live Preview"):
-                    # run_ws_preview(selected_stream_id)
+                    st.markdown("### 📹 Live Video Feed")
+                    if st.button("▶️ Start Live Preview"):
+                    run_ws_preview(selected_stream_id)
             
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
