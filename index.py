@@ -1,9 +1,8 @@
 # index.py
 
 import streamlit as st
-import requests, base64, cv2, numpy as np
+import requests
 from pathlib import Path
-from datetime import datetime
 
 # --- Configuration ---
 BACKEND_URL = "http://18.170.163.99:8000"
@@ -26,14 +25,12 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     }
-    
     .logo-container {
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 10px;
     }
-    
     .system-title {
         color: #ff4444;
         font-size: 2.5em;
@@ -42,14 +39,12 @@ st.markdown("""
         margin: 0;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
     }
-
     .stButton>button {
         border-radius: 20px;
         border: 1px solid #ff4444;
         color: #ff4444;
         transition: all 0.3s;
     }
-
     .stButton>button:hover {
         background-color: #ff4444;
         color: white;
@@ -66,7 +61,7 @@ if 'active_tab' not in st.session_state:
 # --- Helper Functions ---
 def get_active_streams():
     try:
-        resp = requests.get(f"{BACKEND_URL}/active_streams")
+        resp = requests.get(f"{BACKEND_URL}/active_streams", timeout=5)
         return resp.json() if resp.ok else []
     except requests.exceptions.ConnectionError:
         return None # Indicates backend is offline
@@ -76,13 +71,11 @@ def get_active_streams():
 # --- Header ---
 with st.container():
     st.markdown('<div class="main-header">', unsafe_allow_html=True)
-    
     col1, col2 = st.columns([1, 4])
     with col1:
         st.image("logo.png", width=120)
     with col2:
         st.markdown('<p class="system-title">AI VIOLENCE DETECTION SYSTEM</p>', unsafe_allow_html=True)
-    
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -91,7 +84,6 @@ with st.sidebar:
     st.image("logo.png")
     st.title("Navigation")
     st.info("Select a page to view its contents.")
-    
     st.markdown("---")
     st.markdown("#### 📊 System Status")
     active_streams = get_active_streams()
@@ -148,14 +140,11 @@ with tab1:
                         payload["url_or_file"] = url_or_file
                         payload["file_uploaded"] = False
                     else:
-                        # Save the uploaded file locally on the server side via an endpoint would be more robust,
-                        # but for simplicity, we continue with the shared volume approach.
-                        # The backend now knows to look in its 'uploads' folder.
                         tmp_path = Path("uploads") / file_uploaded.name
                         tmp_path.parent.mkdir(exist_ok=True)
                         with open(tmp_path, "wb") as f:
                             f.write(file_uploaded.getbuffer())
-                        payload["url_or_file"] = file_uploaded.name # Just send the filename
+                        payload["url_or_file"] = file_uploaded.name
                         payload["file_uploaded"] = True
                     
                     try:
@@ -189,8 +178,7 @@ with tab2:
             status_text = "RUNNING" if stream.get('running') else "STOPPED"
             
             with st.expander(f"{status_icon} **{stream['name']}** - {status_text}", expanded=True):
-                col_a, col_b, col_c = st.columns(3)
-                
+                col_a, col_b = st.columns(2)
                 with col_a:
                     st.write(f"**ID:** `{stream['stream_id'][:8]}...`")
                     st.write(f"**Type:** {'Demo Video' if stream.get('is_demo') else 'RTSP Stream'}")
@@ -202,7 +190,8 @@ with tab2:
                 
                 if btn_cols[0].button("👁️ View", key=f"view_{stream['stream_id']}", help="Select this stream for Live Preview"):
                     st.session_state['selected_stream'] = stream['stream_id']
-                    st.success(f"'{stream['name']}' selected. Please switch to the 'Live Preview' tab.")
+                    st.success(f"'{stream['name']}' selected. Please switch to the '🔴 Live Preview' tab.")
+                    # No rerun needed here, the message is enough guidance.
 
                 if stream.get('running'):
                     if btn_cols[1].button("⏹️ Stop", key=f"stop_{stream['stream_id']}", type="secondary"):
@@ -215,6 +204,8 @@ with tab2:
 
                 if btn_cols[3].button("🗑️ Delete", key=f"delete_{stream['stream_id']}", type="primary"):
                     requests.delete(f"{BACKEND_URL}/delete_stream/{stream['stream_id']}")
+                    if st.session_state['selected_stream'] == stream['stream_id']:
+                         st.session_state['selected_stream'] = None
                     st.rerun()
 
 # -------------------------------
@@ -224,31 +215,28 @@ with tab3:
     st.header("🔴 Live Video Preview")
     
     streams = get_active_streams()
-    if not streams:
-        st.info("No active streams available. Please add or start a stream.")
+    running_streams = [s for s in streams if s.get('running')] if streams else []
+    
+    if not running_streams:
+        st.warning("No streams are currently running. Please start a stream from the '📋 Manage Streams' tab to view a live preview.")
     else:
-        stream_options = {s['name']: s['stream_id'] for s in streams}
+        stream_options = {s['name']: s['stream_id'] for s in running_streams}
         
-        # If a stream was selected from the manage tab, use it as the default
         selected_index = 0
-        if st.session_state.selected_stream:
-            try:
-                selected_index = list(stream_options.values()).index(st.session_state.selected_stream)
-            except ValueError:
-                st.session_state.selected_stream = None # Clear if ID no longer exists
+        if st.session_state.selected_stream in stream_options.values():
+            selected_index = list(stream_options.values()).index(st.session_state.selected_stream)
+        else:
+            # If the selected stream isn't running, clear it and default to the first running one
+            st.session_state.selected_stream = None
 
-        selected_name = st.selectbox("Choose a stream to view:", options=stream_options.keys(), index=selected_index)
+        selected_name = st.selectbox("Choose a running stream to view:", options=stream_options.keys(), index=selected_index)
         
         if selected_name:
             selected_stream_id = stream_options[selected_name]
-            current_stream = next((s for s in streams if s['stream_id'] == selected_stream_id), None)
-
-            if current_stream and current_stream.get('running'):
-                st.success(f"Displaying live feed for **{current_stream['name']}**")
-                video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
-                st.image(video_url, caption=f"Live Stream: {current_stream['name']}")
-            else:
-                st.warning("This stream is stopped. Please start it from the 'Manage Streams' tab to see the live preview.")
+            video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
+            
+            st.markdown(f"#### Now Viewing: **{selected_name}**")
+            st.image(video_url, caption=f"Live Stream: {selected_name}")
 
 # -------------------------------
 # 4️⃣ Detection Clips Tab
