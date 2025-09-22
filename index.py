@@ -86,21 +86,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def run_ws_preview(stream_id):
-    ws_url = f"ws://18.170.163.99:8000/ws/{stream_id}"  # 🔹 Change to your backend host:port
+    ws_url = f"ws://18.170.163.99:8000/ws/{stream_id}"
     ws = websocket.WebSocket()
     ws.connect(ws_url)
     frame_container = st.empty()
+    last_frame_time = 0
 
     while True:
         try:
             data = ws.recv()
+            now = time.time()
+            if now - last_frame_time < 0.1:  # ✅ Limit to ~10 FPS
+                continue
+            last_frame_time = now
+
             img_bytes = base64.b64decode(data)
             nparr = np.frombuffer(img_bytes, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            frame_container.image(frame, channels="BGR")
+            frame_container.image(frame, channels="BGR", use_container_width=True)
         except Exception as e:
             st.write(f"Connection closed: {e}")
             break
+
 # -------------------------------
 # Header with Logo
 # -------------------------------
