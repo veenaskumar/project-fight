@@ -191,7 +191,6 @@ with tab2:
                 if btn_cols[0].button("👁️ View", key=f"view_{stream['stream_id']}", help="Select this stream for Live Preview"):
                     st.session_state['selected_stream'] = stream['stream_id']
                     st.success(f"'{stream['name']}' selected. Please switch to the '🔴 Live Preview' tab.")
-                    # No rerun needed here, the message is enough guidance.
 
                 if stream.get('running'):
                     if btn_cols[1].button("⏹️ Stop", key=f"stop_{stream['stream_id']}", type="secondary"):
@@ -226,7 +225,6 @@ with tab3:
         if st.session_state.selected_stream in stream_options.values():
             selected_index = list(stream_options.values()).index(st.session_state.selected_stream)
         else:
-            # If the selected stream isn't running, clear it and default to the first running one
             st.session_state.selected_stream = None
 
         selected_name = st.selectbox("Choose a running stream to view:", options=stream_options.keys(), index=selected_index)
@@ -274,16 +272,33 @@ with tab4:
                         
                         clip_url = entry.get("clip_url")
                         if clip_url:
-                            st.video(clip_url)
+                            try:
+                                # Fetch the video content from the presigned URL
+                                video_response = requests.get(clip_url, timeout=15)
+                                video_response.raise_for_status() # Raise error for bad responses
+
+                                # Prepare a clean filename for the download
+                                stream_name = entry.get("stream", "stream").replace(" ", "_")
+                                ts = entry.get("timestamp", "").replace(":", "-").replace(" ", "_")
+                                file_name = f"clip_{stream_name}_{ts}.mp4"
+
+                                st.download_button(
+                                    label="⬇️ Download Clip",
+                                    data=video_response.content,
+                                    file_name=file_name,
+                                    mime="video/mp4"
+                                )
+                            except requests.exceptions.RequestException as e:
+                                st.warning("Could not download clip. The link may have expired.")
                         else:
-                            st.warning("No video clip available.")
+                            st.info("No video clip available for this log.")
                             
                     with col_b:
                         snapshot_url = entry.get("snapshot_url")
                         if snapshot_url:
                             st.image(snapshot_url, caption="Detection Snapshot")
                         else:
-                            st.warning("No snapshot available.")
+                            st.info("No snapshot available.")
                     
                     st.markdown("---")
 
