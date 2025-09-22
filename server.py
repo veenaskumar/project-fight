@@ -281,6 +281,7 @@ def detection_loop(stream_id):
                         s3_key,
                         ExtraArgs={"ContentType": "video/mp4"}
                     )
+                    # ✅ Only log for violence or fall
                     if any(c in ["violence", "fall"] for c in detected_classes):
                         log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
                 except Exception as e:
@@ -290,6 +291,7 @@ def detection_loop(stream_id):
                     except Exception as e:
                         print(f"Failed to remove temp clip {clip_path}: {e}", flush=True)
                 frame_buffer = []
+
 
     # Cleanup resources
     cap.release()
@@ -529,12 +531,13 @@ def stream_video(stream_id: str):
                 confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
                 
                 # Draw bounding boxes for detected objects
-                # Draw bounding boxes for detected objects
+                detected_classes = []
                 if results.boxes is not None:
                     for box in results.boxes:
                         conf = float(box.conf[0].item())
                         cls_id = int(box.cls[0].item())
                         cls_name = get_class_name(cls_id)
+                        detected_classes.append(cls_name)
 
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
