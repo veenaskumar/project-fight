@@ -480,8 +480,9 @@ def get_logs(stream: str = None, sort: str = "desc"):
 
 
 @app.get("/video/{stream_id}")
+@app.get("/video/{stream_id}")
 def stream_video(stream_id: str):
-    """Stream live video with violence detection overlays"""
+    """Stream live video with violence/fall detection overlays"""
     if stream_id not in STREAMS:
         return {"error": "Stream not found"}
     
@@ -503,10 +504,8 @@ def stream_video(stream_id: str):
         
         cap = cv2.VideoCapture(video_source)
         
-        # Check if video capture is successful
         if not cap.isOpened():
             print(f"ERROR: Could not open video source: {video_source}")
-            # Create error frame
             error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
             cv2.putText(error_frame, f"ERROR: Could not open video source", (50, 240), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -515,7 +514,6 @@ def stream_video(stream_id: str):
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
             return
         
-        # Set video properties
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -527,12 +525,10 @@ def stream_video(stream_id: str):
             if not ret:
                 break
             
-            # YOLO detection
             try:
                 results = model(frame)[0]
                 confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
-                
-                # Draw bounding boxes for detected objects
+
                 detected_classes = []
                 if results.boxes is not None:
                     for box in results.boxes:
@@ -543,22 +539,34 @@ def stream_video(stream_id: str):
 
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
+                            if cls_name == "nonviolence":
+                                color = (0, 255, 0)   # Green
+                            elif cls_name == "violence":
+                                color = (0, 0, 255)   # Red
+                            elif cls_name == "fall":
+                                color = (255, 165, 0) # Orange
+                            else:
+                                color = (255, 255, 0) # Cyan fallback
+                            
                             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                             label = f"{cls_name.upper()} {conf:.2f}"
                             cv2.putText(frame, label, (x1, y1-10),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-            except:
+            except Exception as e:
+                print(f"Detection error: {e}")
                 confidence = 0.0
+                detected_classes = []
             
-            violence_detected = confidence >= stream["threshold"]
-            
-            # Add status overlay
-            if violence_detected:
-                cv2.rectangle(frame, (10, 10), (400, 80), (0, 0, 255), -1)
+            # Overlay status
+            if "violence" in detected_classes:
+                cv2.rectangle(frame, (10, 10), (450, 80), (0, 0, 255), -1)
                 cv2.putText(frame, f"VIOLENCE DETECTED! {confidence:.2f}", 
                            (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
+            elif "fall" in detected_classes:
+                cv2.rectangle(frame, (10, 10), (400, 80), (255, 165, 0), -1)
+                cv2.putText(frame, f"FALL DETECTED! {confidence:.2f}", 
+                           (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
             else:
                 cv2.rectangle(frame, (10, 10), (300, 60), (0, 255, 0), -1)
                 cv2.putText(frame, f"SAFE {confidence:.2f}", 
@@ -569,7 +577,7 @@ def stream_video(stream_id: str):
             cv2.putText(frame, timestamp, (10, height - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Yield frame data directly (no VideoWriter needed for streaming)
+            # Yield frame
             _, buffer = cv2.imencode('.jpg', frame)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
@@ -577,4 +585,5 @@ def stream_video(stream_id: str):
         cap.release()
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
+
 
