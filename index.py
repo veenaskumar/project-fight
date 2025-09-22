@@ -7,8 +7,6 @@ import threading
 import asyncio
 import websocket
 from datetime import datetime
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import urllib.request
 
 BACKEND_URL = "http://18.170.163.99:8000"
 WS_URL = "ws://18.170.163.99:8000/ws"
@@ -19,44 +17,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-
-# Define the video transformer class
-class VideoProcessor(VideoTransformerBase):
-    def __init__(self, stream_id):
-        self.stream_id = stream_id
-        self.video_url = f"{BACKEND_URL}/video/{self.stream_id}"
-        self.stream = None
-    
-    def recv(self, frame):
-        if not self.stream:
-            try:
-                # Open the stream using urllib
-                self.stream = urllib.request.urlopen(self.video_url)
-            except Exception as e:
-                st.error(f"Failed to open video stream: {e}")
-                # Return a placeholder black frame if the stream fails
-                return np.zeros((1, 1, 3), dtype=np.uint8)
-
-        bytes_data = bytes()
-        while True:
-            # Read a chunk of data
-            chunk = self.stream.read(4096)
-            if not chunk:
-                break
-            bytes_data += chunk
-            
-            # Find the start and end of the next JPEG frame
-            a = bytes_data.find(b'\xff\xd8')
-            b = bytes_data.find(b'\xff\xd9')
-
-            if a != -1 and b != -1:
-                jpg = bytes_data[a:b+2]
-                bytes_data = bytes_data[b+2:]
-                
-                # Decode the JPEG frame and return as an image
-                img = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                return img
 
 # Custom CSS for better styling
 st.markdown("""
@@ -558,26 +518,25 @@ with tabs[2]:
                     else:
                         st.warning("⏸️ Stream is stopped - click Start to begin")
                 
-                # ... (inside the Live Preview tab)
-                if current_stream and current_stream.get('running', False):
-                    st.markdown("### 🔄 Live Stream Preview")
+                # Video display
+                if current_stream.get('running', False):
+                    video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
                     
-                    # Use webrtc_streamer to display the live video
-                    webrtc_streamer(
-                        key=selected_stream_id,
-                        video_transformer_factory=lambda: VideoProcessor(selected_stream_id),
-                        media_stream_constraints={
-                            "video": {
-                                "width": {"ideal": 640},
-                                "height": {"ideal": 480}
-                            }
-                        }
-                    )
+                    # Main video player
+                    # st.markdown("### 📹 Live Video Feed")
+                    # if st.button("▶️ Start Live Preview"):
+                    # run_ws_preview(selected_stream_id)
+            
+                    # Alternative MJPEG stream for better compatibility
+                    st.markdown("### 🔄 Alternative Stream (MJPEG)")
+                    st.markdown(f"""
+                    <img src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
+                    <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.warning("The selected stream is not running. Please start it from the 'Manage Streams' tab.")
-                    if st.button("Start Stream", key=f"start_{selected_stream_id}"):
-                        start_stream(selected_stream_id)
-                        st.rerun()
+                    st.info("⏸️ Stream is stopped. Click 'Start Stream' to begin live video feed.")
+                
+                # Stream information
                 st.markdown("---")
                 st.subheader("📊 Stream Information")
                 
