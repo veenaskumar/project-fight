@@ -152,11 +152,61 @@ def detection_loop(stream_id):
 
     print(f"DEBUG: Detection loop started for stream {stream_id}")
 
+   fps = cap.get(cv2.CAP_PROP_FPS) or 25
+    frame_skip = 3  # ✅ process every 3rd frame
+    frame_count = 0
+
     while stream.get("running", False):
         ret, frame = cap.read()
         if not ret:
-            time.sleep(0.1)  # Increased delay for better performance
+            time.sleep(0.05)
             continue
+
+        frame_count += 1
+        if frame_count % frame_skip != 0:
+            # Skip YOLO, just show smaller frame
+            small_disp = cv2.resize(frame, (640, 360))
+            FRAME_QUEUES[stream_id].put(small_disp)
+            continue
+
+        # ✅ Downscale for faster YOLO
+        small_frame = cv2.resize(frame, (320, 320))
+
+        try:
+            results = model(small_frame)[0]
+            confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
+            detected_classes = []
+
+            if results.boxes is not None:
+                for box in results.boxes:
+                    conf = float(box.conf[0].item())
+                    cls_id = int(box.cls[0].item())
+                    cls_name = get_class_name(cls_id)
+                    detected_classes.append(cls_name)
+
+                    if conf >= 0.3:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        # Scale back to original size
+                        scale_x = frame.shape[1] / 320
+                        scale_y = frame.shape[0] / 320
+                        x1, x2 = int(x1 * scale_x), int(x2 * scale_x)
+                        y1, y2 = int(y1 * scale_y), int(y2 * scale_y)
+
+                        color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        label = f"{cls_name.upper()} {conf:.2f}"
+                        cv2.putText(frame, label, (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        except:
+            confidence = 0.0
+            detected_classes = []
+
+        # ✅ Resize for streaming
+        display_frame = cv2.resize(frame, (640, 360))
+
+        if stream_id in FRAME_QUEUES:
+            FRAME_QUEUES[stream_id].put(display_frame)
+
 
         # YOLO detection
         try:
