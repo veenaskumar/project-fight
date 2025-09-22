@@ -7,6 +7,8 @@ import threading
 import asyncio
 import websocket
 from datetime import datetime
+import time
+
 
 BACKEND_URL = "http://18.170.163.99:8000"
 WS_URL = "ws://18.170.163.99:8000/ws"
