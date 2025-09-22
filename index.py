@@ -530,7 +530,6 @@ with tabs[2]:
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
                     st.markdown(f"""
-                    <video src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
                     <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
                     """, unsafe_allow_html=True)
                 else:
