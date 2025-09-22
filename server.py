@@ -164,11 +164,13 @@ def detection_loop(stream_id):
             confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
             
             # Draw bounding boxes for detected objects
+            detected_classes = []
             if results.boxes is not None:
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
                     cls_id = int(box.cls[0].item())
                     cls_name = get_class_name(cls_id)
+                    detected_classes.append(cls_name)
 
                     if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
