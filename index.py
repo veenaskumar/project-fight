@@ -85,26 +85,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+import time
 if "ws" not in st.session_state:
     st.session_state.ws = None
+if "frame" not in st.session_state:
+    st.session_state.frame = None
 
 def connect_ws(stream_id):
-    ws_url = f"ws://18.170.163.99:8000/ws/{stream_id}"  # use your backend host
+    if st.session_state.ws:
+        return  # already connected
+    ws_url = f"ws://18.170.163.99:8000/ws/{stream_id}"  # your backend host
     ws = websocket.WebSocket()
     ws.connect(ws_url)
     st.session_state.ws = ws
 
 def get_ws_frame():
     try:
-        if not st.session_state.ws:
-            return None
         data = st.session_state.ws.recv()
         img_bytes = base64.b64decode(data)
         nparr = np.frombuffer(img_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        return frame
-    except Exception:
-        return None
+        st.session_state.frame = frame  # ✅ save frame
+    except Exception as e:
+        st.warning(f"WebSocket error: {e}")
+        st.session_state.ws = None
+
 
 # -------------------------------
 # Header with Logo
@@ -533,11 +538,13 @@ with tabs[2]:
                         connect_ws(selected_stream_id)
 
                     if st.session_state.ws:
-                        frame = get_ws_frame()
-                        if frame is not None:
-                            st.image(frame, channels="BGR")
-                            # Auto-refresh to get next frame
-                            st.rerun()
+                        get_ws_frame()
+                        if st.session_state.frame is not None:
+                            st.image(st.session_state.frame, channels="BGR")
+                        # ⏱️ small sleep to avoid CPU 100%
+                        time.sleep(0.2)
+                        st.rerun()
+
 
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
