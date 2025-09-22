@@ -1,10 +1,10 @@
 # server.py
 
-import threading, time, cv2, base64, tempfile, os, json, boto3, botocore, re, uuid, queue
+import threading, time, cv2, base64, tempfile, os, json, boto3, botocore, re, uuid, queue, shutil
 import numpy as np
 from datetime import datetime
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, UploadFile, File
+from fastapi.responses import StreamingResponse, JSONResponse
 from ultralytics import YOLO
 from twilio.rest import Client
 from dotenv import load_dotenv
@@ -128,9 +128,8 @@ def detection_loop(stream_id):
     stream = STREAMS[stream_id]
     
     video_source = stream["url"]
-    if stream.get("is_demo", False) and not video_source.startswith(('http://', 'https://', 'rtsp://')):
+    if stream.get("is_demo", False):
         video_source = str(UPLOAD_DIR / Path(video_source).name)
-        print(f"DEBUG: Using absolute path for local file: {video_source}")
     
     cap = cv2.VideoCapture(video_source)
     
@@ -148,7 +147,7 @@ def detection_loop(stream_id):
     out = None
 
     if stream_id not in FRAME_QUEUES:
-        FRAME_QUEUES[stream_id] = queue.Queue(maxsize=30) # Prevent queue from growing indefinitely
+        FRAME_QUEUES[stream_id] = queue.Queue(maxsize=30)
 
     print(f"DEBUG: Detection loop started for stream {stream_id}")
 
@@ -158,26 +157,21 @@ def detection_loop(stream_id):
             print(f"DEBUG: End of video stream {stream_id}. Stopping loop.")
             break
 
-        # YOLO detection
         try:
             results = model(frame, verbose=False)[0]
             confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
-            
-            detected_classes = []
+            detected_classes = [get_class_name(int(box.cls[0].item())) for box in results.boxes] if results.boxes else []
+
             if results.boxes is not None:
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
-                    cls_id = int(box.cls[0].item())
-                    cls_name = get_class_name(cls_id)
-                    detected_classes.append(cls_name)
-
+                    cls_name = get_class_name(int(box.cls[0].item()))
                     if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         color = (0, 0, 255) if "violence" in cls_name or "fall" in cls_name else (0, 255, 0)
                         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                         label = f"{cls_name.upper()} {conf:.2f}"
-                        cv2.putText(frame, label, (x1, y1-10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         except Exception as e:
             print(f"Error during model inference: {e}")
             confidence = 0.0
@@ -186,29 +180,22 @@ def detection_loop(stream_id):
         is_violence_or_fall = "violence" in detected_classes or "fall" in detected_classes
         violence_detected = is_violence_or_fall and confidence >= stream["threshold"]
 
-        # Create annotated frame
         display_frame = frame.copy()
-        
         if violence_detected:
             cv2.rectangle(display_frame, (10, 10), (400, 80), (0, 0, 255), -1)
-            cv2.putText(display_frame, f"ALERT! {confidence:.2f}", 
-                       (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
+            cv2.putText(display_frame, f"ALERT! {confidence:.2f}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
         else:
             cv2.rectangle(display_frame, (10, 10), (300, 60), (0, 255, 0), -1)
-            cv2.putText(display_frame, f"SAFE {confidence:.2f}", 
-                       (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+            cv2.putText(display_frame, f"SAFE {confidence:.2f}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
         
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(display_frame, timestamp, (10, display_frame.shape[0] - 20), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(display_frame, timestamp, (10, display_frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # Push frame to queue for WebSocket and MJPEG streamers
         if stream_id in FRAME_QUEUES:
             if FRAME_QUEUES[stream_id].full():
-                FRAME_QUEUES[stream_id].get_nowait() # Discard oldest frame if queue is full
+                FRAME_QUEUES[stream_id].get_nowait()
             FRAME_QUEUES[stream_id].put(display_frame)
         
-        # Clip recording and alert logic
         frame_buffer.append(frame.copy())
         if len(frame_buffer) > buffer_size:
             frame_buffer.pop(0)
@@ -218,15 +205,14 @@ def detection_loop(stream_id):
         else:
             consecutive_count = 0
 
-        # ✨ MODIFICATION: Alert and Cooldown Logic
         time_since_last_alert = time.time() - stream.get("last_alert_time", 0)
         
         if consecutive_count >= alert_trigger and not recording and time_since_last_alert > ALERT_COOLDOWN_SECONDS:
             print(f"Triggering alert for stream {stream_id}")
-            stream["last_alert_time"] = time.time() # Update last alert time
+            stream["last_alert_time"] = time.time()
             
-            tmp_clip = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            clip_path = tmp_clip.name
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_clip:
+                clip_path = tmp_clip.name
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             out = cv2.VideoWriter(clip_path, fourcc, fps, (frame.shape[1], frame.shape[0]))
             for bf in frame_buffer:
@@ -241,12 +227,8 @@ def detection_loop(stream_id):
             finally:
                 if os.path.exists(snapshot_path): os.remove(snapshot_path)
 
-            send_sms_alert(
-                stream["phone"],
-                f"⚠️ Alert on {stream['name']} (Confidence: {confidence:.2f}). Check dashboard for details."
-            )
+            send_sms_alert(stream["phone"], f"⚠️ Alert on {stream['name']} (Confidence: {confidence:.2f}). Check dashboard.")
             
-            # This part runs only ONCE per event due to the cooldown
             if out:
                 out.release()
                 recording = False
@@ -255,60 +237,48 @@ def detection_loop(stream_id):
                     s3.upload_file(clip_path, S3_BUCKET, s3_key_clip, ExtraArgs={"ContentType": "video/mp4"})
                     log_incident(stream["name"], confidence, clip_path=s3_key_clip, snapshot_key=s3_key_snapshot)
                     print(f"Successfully uploaded clip {s3_key_clip}")
-                except Exception as e:
-                    print(f"Failed to upload clip {clip_path}: {e}")
                 finally:
                     if os.path.exists(clip_path): os.remove(clip_path)
-                frame_buffer = [] # Clear buffer after saving
+                frame_buffer = []
 
-    # Cleanup
     cap.release()
     if stream_id in STREAMS:
         STREAMS[stream_id]["running"] = False
     print(f"DEBUG: Detection loop ended for stream {stream_id}")
+    if stream.get("is_demo", False): # Clean up uploaded file
+        try:
+            os.remove(video_source)
+            print(f"Cleaned up demo file: {video_source}")
+        except OSError as e:
+            print(f"Error cleaning up file {video_source}: {e}")
 
-# -------------------------------
-# WebSocket endpoint
-# -------------------------------
-@app.websocket("/ws/{stream_id}")
-async def websocket_endpoint(ws: WebSocket, stream_id: str):
-    await ws.accept()
-    if stream_id not in CLIENTS:
-        CLIENTS[stream_id] = set()
-    CLIENTS[stream_id].add(ws)
-
-    try:
-        while True:
-            if ws.client_state.name != "CONNECTED": break
-            
-            if stream_id in FRAME_QUEUES and not FRAME_QUEUES[stream_id].empty():
-                try:
-                    frame = FRAME_QUEUES[stream_id].get_nowait()
-                    _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                    jpg_str = base64.b64encode(buffer).decode()
-                    await ws.send_text(jpg_str)
-                except queue.Empty:
-                    await asyncio.sleep(0.01)
-                except Exception:
-                    break
-            else:
-                await asyncio.sleep(0.01)
-    except WebSocketDisconnect:
-        print(f"WebSocket disconnected for stream {stream_id}")
-    finally:
-        if stream_id in CLIENTS:
-            CLIENTS[stream_id].discard(ws)
 
 # -------------------------------
 # API endpoints
 # -------------------------------
+@app.post("/upload")
+async def upload_video(file: UploadFile = File(...)):
+    if not file.filename:
+        return JSONResponse(status_code=400, content={"message": "No file selected"})
+    
+    # Create a unique filename to prevent overwrites
+    unique_filename = f"{uuid.uuid4()}_{file.filename}"
+    file_path = UPLOAD_DIR / unique_filename
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"filename": unique_filename}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Could not save file: {e}"})
+
 @app.post("/add_stream")
 def add_stream(
     name: str = Query(...),
     url_or_file: str = Query(...),
     threshold: float = Query(0.5),
     phone: str = Query(""),
-    file_uploaded: bool = Query(False)
+    is_demo: bool = Query(False)
 ):
     stream_id = str(uuid.uuid4())
     STREAMS[stream_id] = {
@@ -318,8 +288,8 @@ def add_stream(
         "threshold": threshold,
         "phone": phone,
         "running": True,
-        "is_demo": file_uploaded,
-        "last_alert_time": 0 # Initialize alert timestamp
+        "is_demo": is_demo,
+        "last_alert_time": 0
     }
     
     t = threading.Thread(target=detection_loop, args=(stream_id,), daemon=True)
@@ -328,7 +298,6 @@ def add_stream(
 
 @app.get("/active_streams")
 def get_active_streams():
-    # Return a copy to avoid race conditions if dict is modified during iteration
     streams_copy = list(STREAMS.values())
     return [
         {
@@ -367,7 +336,7 @@ def delete_stream(stream_id: str):
         return {"error": "Stream not found"}
     
     STREAMS[stream_id]["running"] = False
-    time.sleep(1) # Give the loop a moment to stop
+    time.sleep(1)
     
     if stream_id in FRAME_QUEUES: del FRAME_QUEUES[stream_id]
     if stream_id in CLIENTS: del CLIENTS[stream_id]
@@ -393,20 +362,45 @@ def get_logs(stream: str = None, sort: str = "desc"):
 def stream_video(stream_id: str):
     def generate_video():
         if stream_id not in STREAMS:
-            print(f"Stream {stream_id} not found for MJPEG stream.")
             return
 
         while STREAMS.get(stream_id) and STREAMS[stream_id].get("running", False):
             try:
-                frame = FRAME_QUEUES[stream_id].get(timeout=10) # Wait up to 10s for a new frame
+                frame = FRAME_QUEUES[stream_id].get(timeout=10)
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
             except queue.Empty:
-                print(f"No frame received for stream {stream_id} in 10 seconds. Ending MJPEG stream.")
-                break # End stream if no frame for 10s
+                break
             except Exception:
-                # Stream was likely deleted
                 break
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+# WebSocket Endpoint (Optional, but good to have)
+@app.websocket("/ws/{stream_id}")
+async def websocket_endpoint(ws: WebSocket, stream_id: str):
+    await ws.accept()
+    if stream_id not in CLIENTS:
+        CLIENTS[stream_id] = set()
+    CLIENTS[stream_id].add(ws)
+    try:
+        while True:
+            if ws.client_state.name != "CONNECTED": break
+            if stream_id in FRAME_QUEUES and not FRAME_QUEUES[stream_id].empty():
+                try:
+                    frame = FRAME_QUEUES[stream_id].get_nowait()
+                    _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    jpg_str = base64.b64encode(buffer).decode()
+                    await ws.send_text(jpg_str)
+                except queue.Empty:
+                    await asyncio.sleep(0.01)
+                except Exception:
+                    break
+            else:
+                await asyncio.sleep(0.01)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if stream_id in CLIENTS:
+            CLIENTS[stream_id].discard(ws)

@@ -25,12 +25,6 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
     }
-    .logo-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 10px;
-    }
     .system-title {
         color: #ff4444;
         font-size: 2.5em;
@@ -55,8 +49,6 @@ st.markdown("""
 # --- State Management ---
 if 'selected_stream' not in st.session_state:
     st.session_state['selected_stream'] = None
-if 'active_tab' not in st.session_state:
-    st.session_state['active_tab'] = "Add Stream"
 
 # --- Helper Functions ---
 def get_active_streams():
@@ -64,7 +56,7 @@ def get_active_streams():
         resp = requests.get(f"{BACKEND_URL}/active_streams", timeout=5)
         return resp.json() if resp.ok else []
     except requests.exceptions.ConnectionError:
-        return None # Indicates backend is offline
+        return None
     except Exception:
         return []
 
@@ -112,50 +104,61 @@ with tab1:
             st.markdown("---")
             input_method = st.radio("Choose Video Source", ["RTSP Stream", "Upload File"], horizontal=True)
             
-            url_or_file = ""
-            file_uploaded = None
+            url_or_file_input = ""
+            file_uploader = None
             if input_method == "RTSP Stream":
-                url_or_file = st.text_input("RTSP URL*", placeholder="rtsp://user:pass@ip:port/stream")
+                url_or_file_input = st.text_input("RTSP URL*", placeholder="rtsp://user:pass@ip:port/stream")
             else:
-                file_uploaded = st.file_uploader("Upload MP4 Video*", type=["mp4"])
+                file_uploader = st.file_uploader("Upload MP4 Video*", type=["mp4"])
 
             submitted = st.form_submit_button("🚀 Add Stream", type="primary", use_container_width=True)
             
             if submitted:
-                is_valid = True
                 if not name:
                     st.error("Please enter a stream name.")
-                    is_valid = False
-                if input_method == "RTSP Stream" and not url_or_file:
-                    st.error("Please enter an RTSP URL.")
-                    is_valid = False
-                if input_method == "Upload File" and not file_uploaded:
-                    st.error("Please upload a video file.")
-                    is_valid = False
-
-                if is_valid:
+                else:
                     payload = {"name": name, "threshold": threshold, "phone": phone}
                     
                     if input_method == "RTSP Stream":
-                        payload["url_or_file"] = url_or_file
-                        payload["file_uploaded"] = False
-                    else:
-                        tmp_path = Path("uploads") / file_uploaded.name
-                        tmp_path.parent.mkdir(exist_ok=True)
-                        with open(tmp_path, "wb") as f:
-                            f.write(file_uploaded.getbuffer())
-                        payload["url_or_file"] = file_uploaded.name
-                        payload["file_uploaded"] = True
-                    
-                    try:
-                        resp = requests.post(f"{BACKEND_URL}/add_stream", params=payload)
-                        if resp.ok:
-                            st.success(f"✅ Stream '{name}' added successfully!")
-                            st.balloons()
+                        if not url_or_file_input:
+                            st.error("Please enter an RTSP URL.")
                         else:
-                            st.error(f"❌ Failed to add stream: {resp.text}")
-                    except Exception as e:
-                        st.error(f"❌ Connection error: {e}")
+                            payload["url_or_file"] = url_or_file_input
+                            payload["is_demo"] = False
+                            try:
+                                resp = requests.post(f"{BACKEND_URL}/add_stream", params=payload)
+                                if resp.ok:
+                                    st.success(f"✅ Stream '{name}' added successfully!")
+                                    st.balloons()
+                                else:
+                                    st.error(f"❌ Failed to add stream: {resp.text}")
+                            except Exception as e:
+                                st.error(f"❌ Connection error: {e}")
+
+                    elif input_method == "Upload File":
+                        if not file_uploader:
+                            st.error("Please upload a video file.")
+                        else:
+                            with st.spinner("Uploading file..."):
+                                try:
+                                    files = {'file': (file_uploader.name, file_uploader.getvalue(), file_uploader.type)}
+                                    upload_resp = requests.post(f"{BACKEND_URL}/upload", files=files)
+                                    
+                                    if upload_resp.ok:
+                                        server_filename = upload_resp.json().get("filename")
+                                        payload["url_or_file"] = server_filename
+                                        payload["is_demo"] = True
+                                        
+                                        stream_resp = requests.post(f"{BACKEND_URL}/add_stream", params=payload)
+                                        if stream_resp.ok:
+                                            st.success(f"✅ File uploaded and stream '{name}' started!")
+                                            st.balloons()
+                                        else:
+                                            st.error(f"❌ File uploaded, but failed to start stream: {stream_resp.text}")
+                                    else:
+                                        st.error(f"❌ File upload failed: {upload_resp.text}")
+                                except Exception as e:
+                                    st.error(f"❌ An error occurred during upload: {e}")
 
 # -------------------------------
 # 2️⃣ Manage Streams Tab
@@ -203,7 +206,7 @@ with tab2:
 
                 if btn_cols[3].button("🗑️ Delete", key=f"delete_{stream['stream_id']}", type="primary"):
                     requests.delete(f"{BACKEND_URL}/delete_stream/{stream['stream_id']}")
-                    if st.session_state['selected_stream'] == stream['stream_id']:
+                    if st.session_state.get('selected_stream') == stream['stream_id']:
                          st.session_state['selected_stream'] = None
                     st.rerun()
 
@@ -222,17 +225,16 @@ with tab3:
         stream_options = {s['name']: s['stream_id'] for s in running_streams}
         
         selected_index = 0
-        if st.session_state.selected_stream in stream_options.values():
-            selected_index = list(stream_options.values()).index(st.session_state.selected_stream)
+        if st.session_state.get('selected_stream') in stream_options.values():
+            selected_index = list(stream_options.values()).index(st.session_state.get('selected_stream'))
         else:
-            st.session_state.selected_stream = None
+            st.session_state['selected_stream'] = None
 
         selected_name = st.selectbox("Choose a running stream to view:", options=stream_options.keys(), index=selected_index)
         
         if selected_name:
             selected_stream_id = stream_options[selected_name]
             video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
-            
             st.markdown(f"#### Now Viewing: **{selected_name}**")
             st.image(video_url, caption=f"Live Stream: {selected_name}")
 
@@ -264,7 +266,6 @@ with tab4:
             for entry in logs:
                 with st.container():
                     col_a, col_b = st.columns([2, 1])
-                    
                     with col_a:
                         st.subheader(f"Event on: {entry.get('stream', 'N/A')}")
                         st.write(f"**Timestamp:** {entry.get('timestamp', 'N/A')}")
@@ -273,11 +274,8 @@ with tab4:
                         clip_url = entry.get("clip_url")
                         if clip_url:
                             try:
-                                # Fetch the video content from the presigned URL
                                 video_response = requests.get(clip_url, timeout=15)
-                                video_response.raise_for_status() # Raise error for bad responses
-
-                                # Prepare a clean filename for the download
+                                video_response.raise_for_status()
                                 stream_name = entry.get("stream", "stream").replace(" ", "_")
                                 ts = entry.get("timestamp", "").replace(":", "-").replace(" ", "_")
                                 file_name = f"clip_{stream_name}_{ts}.mp4"
@@ -286,10 +284,11 @@ with tab4:
                                     label="⬇️ Download Clip",
                                     data=video_response.content,
                                     file_name=file_name,
-                                    mime="video/mp4"
+                                    mime="video/mp4",
+                                    key=f"dl_{entry.get('timestamp')}"
                                 )
-                            except requests.exceptions.RequestException as e:
-                                st.warning("Could not download clip. The link may have expired.")
+                            except requests.exceptions.RequestException:
+                                st.warning("Could not download clip. The link may have expired or is invalid.")
                         else:
                             st.info("No video clip available for this log.")
                             
@@ -299,7 +298,6 @@ with tab4:
                             st.image(snapshot_url, caption="Detection Snapshot")
                         else:
                             st.info("No snapshot available.")
-                    
                     st.markdown("---")
 
     except Exception as e:
