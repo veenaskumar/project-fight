@@ -541,9 +541,9 @@ with tabs[2]:
                         get_ws_frame()
                         if st.session_state.frame is not None:
                             st.image(st.session_state.frame, channels="BGR")
-                        # ⏱️ small sleep to avoid CPU 100%
-                        time.sleep(0.2)
-                        st.rerun()
+                        # # ⏱️ small sleep to avoid CPU 100%
+                        # time.sleep(0.2)
+                        # st.rerun()
 
 
                     # Alternative MJPEG stream for better compatibility
