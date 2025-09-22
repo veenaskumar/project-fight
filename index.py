@@ -537,7 +537,7 @@ with tabs[2]:
                         if frame is not None:
                             st.image(frame, channels="BGR")
                             # Auto-refresh to get next frame
-                            st.experimental_rerun()
+                            st.rerun()
 
                     # Alternative MJPEG stream for better compatibility
                     st.markdown("### 🔄 Alternative Stream (MJPEG)")
