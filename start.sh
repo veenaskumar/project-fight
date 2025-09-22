@@ -21,6 +21,8 @@ echo "Starting FastAPI server (with SSL)..."
 nohup uvicorn server:app \
   --host 0.0.0.0 \
   --port 8000 \
+  --server.sslCertFile $CERT \
+  --server.sslKeyFile $KEY \
   > "$SERVER_LOG" 2>&1 &
 
 # Start Streamlit app in background with SSL
