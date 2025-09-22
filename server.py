@@ -152,7 +152,7 @@ def detection_loop(stream_id):
 
     print(f"DEBUG: Detection loop started for stream {stream_id}")
 
-   fps = cap.get(cv2.CAP_PROP_FPS) or 25
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25
     frame_skip = 3  # ✅ process every 3rd frame
     frame_count = 0
 
