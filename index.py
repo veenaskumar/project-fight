@@ -10,10 +10,10 @@ from datetime import datetime
 import time
 
 
-BACKEND_URL = "http://18.170.163.99:8000"
-WS_URL = "ws://18.170.163.99:8000/ws"
-# BACKEND_URL = "http://127.0.0.1:8000"
-# WS_URL = "ws://127.0.0.1:8000/ws"
+# BACKEND_URL = "http://18.170.163.99:8000"
+# WS_URL = "ws://18.170.163.99:8000/ws"
+BACKEND_URL = "http://127.0.0.1:8000"
+WS_URL = "ws://127.0.0.1:8000/ws"
 
 
 st.set_page_config(
