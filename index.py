@@ -5,11 +5,16 @@ from pathlib import Path
 from io import BytesIO
 import threading
 import asyncio
-import websockets
+import websocket
 from datetime import datetime
+import time
+
 
 BACKEND_URL = "http://18.170.163.99:8000"
 WS_URL = "ws://18.170.163.99:8000/ws"
+# BACKEND_URL = "http://127.0.0.1:8000"
+# WS_URL = "ws://127.0.0.1:8000/ws"
+
 
 st.set_page_config(
     page_title="Violence Detection Dashboard", 
@@ -84,6 +89,29 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+def run_ws_preview(stream_id):
+    ws_url = f"{WS_URL}/{stream_id}"
+    ws = websocket.WebSocket()
+    ws.connect(ws_url)
+    frame_container = st.empty()
+    last_frame_time = 0
+
+    while True:
+        try:
+            data = ws.recv()
+            now = time.time()
+            if now - last_frame_time < 0.1:  # ✅ Limit to ~10 FPS
+                continue
+            last_frame_time = now
+
+            img_bytes = base64.b64decode(data)
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            frame_container.image(frame, channels="BGR", use_container_width=True)
+        except Exception as e:
+            st.write(f"Connection closed: {e}")
+            break
 
 # -------------------------------
 # Header with Logo
@@ -505,25 +533,18 @@ with tabs[2]:
                 # Video display
                 if current_stream.get('running', False):
                     video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
-                    
-                    # Main video player
+
                     st.markdown("### 📹 Live Video Feed")
-                    st.markdown(f"""
-                    <div style="text-align: center; margin: 20px 0;">
-                        <video width="100%" height="500" controls autoplay muted loop style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); background: #000;">
-                            <source src="{video_url}" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-                    # Alternative MJPEG stream for better compatibility
-                    st.markdown("### 🔄 Alternative Stream (MJPEG)")
-                    st.markdown(f"""
-                    <div style="text-align: center; border: 2px solid #ddd; border-radius: 10px; padding: 10px; background: #f8f9fa;">
+                    mode = st.radio("Preview mode", ["WebSocket (low latency)", "MJPEG (fallback)"], horizontal=True)
+
+                    if mode == "WebSocket (low latency)":
+                        if st.button("▶️ Start Live Preview"):
+                            run_ws_preview(selected_stream_id)
+                    else:
+                        st.markdown(f"""
                         <img src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
-                    </div>
-                    """, unsafe_allow_html=True)
+                        <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
+                        """, unsafe_allow_html=True)
                 else:
                     st.info("⏸️ Stream is stopped. Click 'Start Stream' to begin live video feed.")
                 
@@ -606,13 +627,47 @@ with tabs[3]:
         for entry in logs:
             ts = entry.get("timestamp", "N/A")
             stream_name = entry.get("stream", "Unknown")
-            conf = entry.get("confidence", 0.0)
-            rows.append({"Time": ts, "Stream": stream_name, "Confidence": round(conf, 2)})
-        # Render centered markdown table
-        table_lines = [
-            "| Time | Stream | Confidence |",
-            "|:---:|:---:|:---:|",
-        ]
-        for r in rows:
-            table_lines.append(f"| {r['Time']} | {r['Stream']} | {r['Confidence']} |")
-        st.markdown("\n".join(table_lines))
+            conf = round(entry.get("confidence", 0.0), 2)
+            clip_url = entry.get("clip_url")
+            snapshot_url = entry.get("snapshot_url")
+
+            with st.container():
+                st.markdown(f"### 📌 {stream_name} - {ts}")
+                st.write(f"**Confidence:** {conf}")
+
+                cols = st.columns(2)
+
+                # Snapshot preview
+                with cols[0]:
+                    if snapshot_url:
+                        st.image(snapshot_url, caption="Snapshot", use_container_width=True)
+                    else:
+                        st.warning("No snapshot available")
+
+                    if clip_url:
+                        try:
+                            # First check if clip exists
+                            head_resp = requests.get(clip_url, timeout=5)
+                            if head_resp.status_code == 200:
+                                # Now fetch the actual clip only if it exists
+                                resp = requests.get(clip_url, timeout=30)
+                                if resp.status_code == 200:
+                                    st.download_button(
+                                        label="⬇️ Download Clip",
+                                        data=resp.content,
+                                        file_name=f"{stream_name}_{ts}.mp4",
+                                        mime="video/mp4"
+                                    )
+                                else:
+                                    st.warning("Clip expired or deleted")
+                            else:
+                                st.warning("Clip expired or deleted")
+                        except Exception as e:
+                            st.warning(f"Clip not found: {e}")
+
+
+                st.markdown("---")
+
+
+
+

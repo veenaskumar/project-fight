@@ -8,6 +8,8 @@ from twilio.rest import Client
 from dotenv import load_dotenv
 from pathlib import Path
 import asyncio
+import time
+
 
 # -------------------------------
 # Load env and config
@@ -25,7 +27,16 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH) if TWILIO_SID and TWILIO_AUTH else None
 
 # AWS S3
-s3 = boto3.client("s3")
+s3 = boto3.client(
+    "s3",
+    region_name="eu-west-2",
+    config=botocore.client.Config(signature_version="s3v4")
+)
+
+ID2CLASS = {0: "violence", 1: "nonviolence", 2: "fall"}
+def get_class_name(cls_id: int) -> str:
+    return ID2CLASS.get(cls_id, f"class_{cls_id}")
+
 
 # YOLO model
 model = YOLO("violence_detection_v4.pt")
@@ -73,21 +84,30 @@ def generate_presigned_url(key, expires=86400):
             Params={"Bucket": S3_BUCKET, "Key": key},
             ExpiresIn=expires
         )
-    except Exception:
+    except Exception as e:
+        print(f"Presigned URL generation failed for {key}: {e}", flush=True)
         return None
+
 
 def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
 
     if clip_path:
-        entry["clip_url"] = generate_presigned_url(clip_path)
+        if clip_path.startswith("http"):
+            clip_path = clip_path.split(".amazonaws.com/")[-1].split("?")[0]
+        entry["clip"] = clip_path
+
     if snapshot_key:
-        entry["snapshot_url"] = generate_presigned_url(snapshot_key)
+        if snapshot_key.startswith("http"):
+            snapshot_key = snapshot_key.split(".amazonaws.com/")[-1].split("?")[0]
+        entry["snapshot"] = snapshot_key
 
     logs = load_logs_from_s3()
     logs.append(entry)
     save_logs_to_s3(logs)
+
+
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
         twilio_client.messages.create(
@@ -112,7 +132,13 @@ def detection_loop(stream_id):
         print(f"DEBUG: Detection loop - Converted to absolute path: {video_source}")
         print(f"DEBUG: Detection loop - Absolute path exists: {os.path.exists(video_source)}")
     
-    cap = cv2.VideoCapture(video_source)
+    # Prefer FFMPEG with low-latency flags for RTSP
+    if str(video_source).startswith("rtsp://"):
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = \
+            "rtsp_transport;tcp|max_delay;0|stimeout;5000000|buffer_size;102400|fifo_size;5000000|reorder_queue_size;0|flags;low_delay"
+        cap = cv2.VideoCapture(video_source, cv2.CAP_FFMPEG)
+    else:
+        cap = cv2.VideoCapture(video_source)
     
     # Check if video capture is successful
     if not cap.isOpened():
@@ -130,34 +156,73 @@ def detection_loop(stream_id):
     out = None
 
     if stream_id not in FRAME_QUEUES:
-        FRAME_QUEUES[stream_id] = queue.Queue()
+        # Small queue to avoid buildup of stale frames
+        FRAME_QUEUES[stream_id] = queue.Queue(maxsize=2)
 
     print(f"DEBUG: Detection loop started for stream {stream_id}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25
+    frame_skip = 3  # ✅ process every 3rd frame
+    frame_count = 0
 
     while stream.get("running", False):
         ret, frame = cap.read()
         if not ret:
-            time.sleep(0.1)  # Increased delay for better performance
+            time.sleep(0.05)
             continue
 
-        # YOLO detection
+        frame_count += 1
+        # Precompute display frame
+        display_frame = cv2.resize(frame, (640, 360))
+        if frame_count % frame_skip != 0:
+            # Skip heavy YOLO most frames; enqueue latest preview non-blocking
+            try:
+                FRAME_QUEUES[stream_id].put_nowait(display_frame)
+            except queue.Full:
+                pass
+            continue
+
+        # ✅ Downscale for faster YOLO
+        small_frame = cv2.resize(frame, (320, 320))
+
         try:
-            results = model(frame)[0]
+            results = model(small_frame)[0]
             confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
-            
-            # Draw bounding boxes for detected objects
+            detected_classes = []
+
             if results.boxes is not None:
                 for box in results.boxes:
                     conf = float(box.conf[0].item())
-                    if conf >= 0.3:  # Only show boxes with confidence > 0.3
+                    cls_id = int(box.cls[0].item())
+                    cls_name = get_class_name(cls_id)
+                    detected_classes.append(cls_name)
+
+                    if conf >= 0.3:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        # Draw bounding box
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0) if conf < stream["threshold"] else (0, 0, 255), 2)
-                        # Draw confidence label
-                        label = f"{'VIOLENCE' if conf >= stream['threshold'] else 'SAFE'}: {conf:.2f}"
-                        cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                        # Scale back to original size
+                        scale_x = frame.shape[1] / 320
+                        scale_y = frame.shape[0] / 320
+                        x1, x2 = int(x1 * scale_x), int(x2 * scale_x)
+                        y1, y2 = int(y1 * scale_y), int(y2 * scale_y)
+
+                        color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        label = f"{cls_name.upper()} {conf:.2f}"
+                        cv2.putText(frame, label, (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         except:
             confidence = 0.0
+            detected_classes = []
+
+        # Enqueue annotated frame non-blocking
+        if stream_id in FRAME_QUEUES:
+            try:
+                FRAME_QUEUES[stream_id].put_nowait(display_frame)
+            except queue.Full:
+                pass
+
+
+        # Remove duplicate full-size YOLO inference to reduce latency
 
         violence_detected = confidence >= stream["threshold"]
 
@@ -227,10 +292,19 @@ def detection_loop(stream_id):
             snapshot_path = f"{stream_id}_{int(time.time())}.jpg"
             cv2.imwrite(snapshot_path, frame)
             s3_key_snapshot = f"snapshots/{Path(snapshot_path).name}"
-            try: s3.upload_file(snapshot_path, S3_BUCKET, s3_key_snapshot)
-            except: pass
-            try: os.remove(snapshot_path)
-            except: pass
+            try:
+                s3.upload_file(
+                    snapshot_path,
+                    S3_BUCKET,
+                    s3_key_snapshot,
+                    ExtraArgs={"ContentType": "image/jpeg"}
+                )
+            except Exception as e:
+                print(f"Failed to upload snapshot {snapshot_path} -> {s3_key_snapshot}: {e}", flush=True)
+            finally:
+                try: os.remove(snapshot_path)
+                except Exception as e:
+                    print(f"Failed to remove temp snapshot {snapshot_path}: {e}", flush=True)
 
             send_sms_alert(
                 stream["phone"],
@@ -244,12 +318,23 @@ def detection_loop(stream_id):
                 recording = False
                 s3_key = f"clips/{Path(clip_path).name}"
                 try:
-                    s3.upload_file(clip_path, S3_BUCKET, s3_key)
-                    log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
-                except: pass
-                try: os.remove(clip_path)
-                except: pass
+                    s3.upload_file(
+                        clip_path,
+                        S3_BUCKET,
+                        s3_key,
+                        ExtraArgs={"ContentType": "video/mp4"}
+                    )
+                    # ✅ Only log for violence or fall
+                    if any(c in ["violence", "fall"] for c in detected_classes):
+                        log_incident(stream["name"], confidence, clip_path=s3_key, snapshot_key=s3_key_snapshot)
+                except Exception as e:
+                    print(f"Failed to upload clip {clip_path} -> {s3_key}: {e}", flush=True)
+                finally:
+                    try: os.remove(clip_path)
+                    except Exception as e:
+                        print(f"Failed to remove temp clip {clip_path}: {e}", flush=True)
                 frame_buffer = []
+
 
     # Cleanup resources
     cap.release()
@@ -419,26 +504,26 @@ def delete_stream(stream_id: str):
 def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
 
-    # Map raw keys to presigned URLs
     for entry in logs:
-        if "clip" in entry:
-            entry["clip_url"] = generate_presigned_url(entry["clip"])
-        if "snapshot" in entry:
-            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
+        if entry.get("clip"):
+            entry["clip_url"] = generate_presigned_url(entry["clip"], expires=86400)
+            print(f"Generated clip URL: {entry['clip_url']}", flush=True)
+        if entry.get("snapshot"):
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"], expires=86400)
+            print(f"Generated snapshot URL: {entry['snapshot_url']}", flush=True)
 
-    # Filter by stream name
     if stream:
         logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
 
-    # Sort by timestamp
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
-
     return logs
 
 
+
+@app.get("/video/{stream_id}")
 @app.get("/video/{stream_id}")
 def stream_video(stream_id: str):
-    """Stream live video with violence detection overlays"""
+    """Stream live video with violence/fall detection overlays"""
     if stream_id not in STREAMS:
         return {"error": "Stream not found"}
     
@@ -460,10 +545,8 @@ def stream_video(stream_id: str):
         
         cap = cv2.VideoCapture(video_source)
         
-        # Check if video capture is successful
         if not cap.isOpened():
             print(f"ERROR: Could not open video source: {video_source}")
-            # Create error frame
             error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
             cv2.putText(error_frame, f"ERROR: Could not open video source", (50, 240), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -472,7 +555,6 @@ def stream_video(stream_id: str):
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
             return
         
-        # Set video properties
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -484,32 +566,48 @@ def stream_video(stream_id: str):
             if not ret:
                 break
             
-            # YOLO detection
             try:
                 results = model(frame)[0]
                 confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
-                
-                # Draw bounding boxes for detected objects
+
+                detected_classes = []
                 if results.boxes is not None:
                     for box in results.boxes:
                         conf = float(box.conf[0].item())
+                        cls_id = int(box.cls[0].item())
+                        cls_name = get_class_name(cls_id)
+                        detected_classes.append(cls_name)
+
                         if conf >= 0.3:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            # Draw bounding box
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0) if conf < stream["threshold"] else (0, 0, 255), 2)
-                            # Draw confidence label
-                            label = f"{'VIOLENCE' if conf >= stream['threshold'] else 'SAFE'}: {conf:.2f}"
-                            cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            except:
+                            if cls_name == "nonviolence":
+                                color = (0, 255, 0)   # Green
+                            elif cls_name == "violence":
+                                color = (0, 0, 255)   # Red
+                            elif cls_name == "fall":
+                                color = (255, 165, 0) # Orange
+                            else:
+                                color = (255, 255, 0) # Cyan fallback
+                            
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                            label = f"{cls_name.upper()} {conf:.2f}"
+                            cv2.putText(frame, label, (x1, y1-10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+            except Exception as e:
+                print(f"Detection error: {e}")
                 confidence = 0.0
+                detected_classes = []
             
-            violence_detected = confidence >= stream["threshold"]
-            
-            # Add status overlay
-            if violence_detected:
-                cv2.rectangle(frame, (10, 10), (400, 80), (0, 0, 255), -1)
+            # Overlay status
+            if "violence" in detected_classes:
+                cv2.rectangle(frame, (10, 10), (450, 80), (0, 0, 255), -1)
                 cv2.putText(frame, f"VIOLENCE DETECTED! {confidence:.2f}", 
                            (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
+            elif "fall" in detected_classes:
+                cv2.rectangle(frame, (10, 10), (400, 80), (255, 165, 0), -1)
+                cv2.putText(frame, f"FALL DETECTED! {confidence:.2f}", 
+                           (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
             else:
                 cv2.rectangle(frame, (10, 10), (300, 60), (0, 255, 0), -1)
                 cv2.putText(frame, f"SAFE {confidence:.2f}", 
@@ -520,7 +618,7 @@ def stream_video(stream_id: str):
             cv2.putText(frame, timestamp, (10, height - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Yield frame data directly (no VideoWriter needed for streaming)
+            # Yield frame
             _, buffer = cv2.imencode('.jpg', frame)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
@@ -528,4 +626,5 @@ def stream_video(stream_id: str):
         cap.release()
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
+
 
