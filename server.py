@@ -66,15 +66,6 @@ def save_logs_to_s3(data):
         ContentType="application/json"
     )
 
-def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
-    if clip_path: entry["clip"] = clip_path
-    if snapshot_key: entry["snapshot"] = snapshot_key
-    logs = load_logs_from_s3()
-    logs.append(entry)
-    save_logs_to_s3(logs)
-
 def generate_presigned_url(key, expires=86400):
     try:
         return s3.generate_presigned_url(
@@ -85,6 +76,18 @@ def generate_presigned_url(key, expires=86400):
     except Exception:
         return None
 
+def log_incident(stream_name, confidence, clip_path=None, snapshot_key=None):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {"timestamp": ts, "stream": stream_name, "confidence": confidence}
+
+    if clip_path:
+        entry["clip_url"] = generate_presigned_url(clip_path)
+    if snapshot_key:
+        entry["snapshot_url"] = generate_presigned_url(snapshot_key)
+
+    logs = load_logs_from_s3()
+    logs.append(entry)
+    save_logs_to_s3(logs)
 def send_sms_alert(phone, message):
     if twilio_client and is_valid_phone(phone):
         twilio_client.messages.create(
@@ -413,15 +416,25 @@ def delete_stream(stream_id: str):
     return {"message": f"Stream {stream_id} deleted successfully"}
 
 @app.get("/logs")
-def get_logs():
+def get_logs(stream: str = None, sort: str = "desc"):
     logs = load_logs_from_s3()
-    # Generate presigned URLs for clips/snapshots
+
+    # Map raw keys to presigned URLs
     for entry in logs:
         if "clip" in entry:
-            entry["clip"] = generate_presigned_url(entry["clip"])
+            entry["clip_url"] = generate_presigned_url(entry["clip"])
         if "snapshot" in entry:
-            entry["snapshot"] = generate_presigned_url(entry["snapshot"])
+            entry["snapshot_url"] = generate_presigned_url(entry["snapshot"])
+
+    # Filter by stream name
+    if stream:
+        logs = [l for l in logs if l.get("stream", "").lower() == stream.lower()]
+
+    # Sort by timestamp
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=(sort == "desc"))
+
     return logs
+
 
 @app.get("/video/{stream_id}")
 def stream_video(stream_id: str):
@@ -515,3 +528,4 @@ def stream_video(stream_id: str):
         cap.release()
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
+

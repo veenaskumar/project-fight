@@ -8,8 +8,8 @@ import asyncio
 import websockets
 from datetime import datetime
 
-BACKEND_URL = "http://localhost:8000"
-WS_URL = "ws://localhost:8000/ws"
+BACKEND_URL = "http://18.170.163.99:8000"
+WS_URL = "ws://18.170.163.99:8000/ws"
 
 st.set_page_config(
     page_title="Violence Detection Dashboard", 
@@ -161,8 +161,7 @@ with st.sidebar:
     # Footer
     st.markdown("""
     <div style="text-align: center; color: #666; font-size: 0.8em;">
-        <p>© 2024 Violence Detection System</p>
-        <p>Powered by AI & Machine Learning</p>
+        <p>© 2025 NightSheield AI</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -561,31 +560,59 @@ with tabs[2]:
 # -------------------------------
 with tabs[3]:
     st.header("Detection Clips")
-    # Fetch logs from backend S3
+
+    stream_filter = st.text_input("Filter by Stream (optional)")
+    sort_order = st.selectbox("Sort Order", ["Newest First", "Oldest First"])
+
+    sort_param = "desc" if sort_order == "Newest First" else "asc"
+    params = {"sort": sort_param}
+    if stream_filter:
+        params["stream"] = stream_filter
+
     try:
-        logs_resp = requests.get(f"{BACKEND_URL}/logs")  # Implement /logs endpoint in backend
-        logs = logs_resp.json() if logs_resp.ok else []
-    except:
+        resp = requests.get(f"{BACKEND_URL}/logs", params=params, timeout=10)
+        logs = resp.json() if resp.ok else []
+    except Exception as e:
+        st.error(f"Error fetching logs: {e}")
         logs = []
 
-    for entry in logs[::-1]:  # show latest first
-        ts = entry.get("timestamp")
-        stream_name = entry.get("stream")
-        conf = entry.get("confidence")
-        clip = entry.get("clip")
-        snapshot = entry.get("snapshot")
+    # Apply client-side, case-insensitive substring filter on stream name
+    if stream_filter:
+        needle = stream_filter.strip().lower()
+        logs = [l for l in logs if needle in (l.get("stream", "").lower())]
 
-        st.subheader(f"{stream_name} - {ts} - Confidence: {conf:.2f}")
-        cols = st.columns(2)
-        if snapshot:
+    # Client-side sort by parsed timestamp to ensure correct ordering
+    from datetime import datetime as _dt
+    def _parse_ts(s: str):
+        fmts = [
+            "%Y-%m-%d %H:%M:%S",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+            "%d-%m-%Y %H:%M:%S",
+        ]
+        for f in fmts:
             try:
-                resp = requests.get(snapshot)
-                content_type = resp.headers.get("Content-Type", "")
-                if resp.ok and content_type.startswith("image"):
-                    cols[0].image(resp.content, caption="Snapshot")
-                else:
-                    cols[0].warning(f"Snapshot not available or invalid. Content-Type: {content_type}")
-            except Exception as e:
-                cols[0].error(f"Failed to load snapshot: {e}")
-        if clip:
-            cols[1].video(requests.get(clip).content, format="video/mp4")
+                return _dt.strptime((s or "").strip(), f)
+            except Exception:
+                continue
+        return _dt.min
+
+    logs.sort(key=lambda x: _parse_ts(x.get("timestamp")), reverse=(sort_order == "Newest First"))
+
+    if not logs:
+        st.info("No detection clips available.")
+    else:
+        rows = []
+        for entry in logs:
+            ts = entry.get("timestamp", "N/A")
+            stream_name = entry.get("stream", "Unknown")
+            conf = entry.get("confidence", 0.0)
+            rows.append({"Time": ts, "Stream": stream_name, "Confidence": round(conf, 2)})
+        # Render centered markdown table
+        table_lines = [
+            "| Time | Stream | Confidence |",
+            "|:---:|:---:|:---:|",
+        ]
+        for r in rows:
+            table_lines.append(f"| {r['Time']} | {r['Stream']} | {r['Confidence']} |")
+        st.markdown("\n".join(table_lines))
