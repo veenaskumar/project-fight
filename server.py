@@ -135,10 +135,16 @@ def detection_loop(stream_id):
     # Prefer FFMPEG with low-latency flags for RTSP
     if str(video_source).startswith("rtsp://"):
         os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = \
-            "rtsp_transport;tcp|max_delay;0|stimeout;5000000|buffer_size;102400|fifo_size;5000000|reorder_queue_size;0|flags;low_delay"
+            "rtsp_transport;tcp|max_delay;0|stimeout;5000000|buffer_size;102400|fifo_size;5000000|reorder_queue_size;0|flags;low_delay|analyzeduration;0|probesize;32"
         cap = cv2.VideoCapture(video_source, cv2.CAP_FFMPEG)
     else:
         cap = cv2.VideoCapture(video_source)
+
+    # Minimize internal buffering when supported
+    try:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
     
     # Check if video capture is successful
     if not cap.isOpened():
@@ -162,7 +168,7 @@ def detection_loop(stream_id):
     print(f"DEBUG: Detection loop started for stream {stream_id}")
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
-    frame_skip = 3  # ✅ process every 3rd frame
+    frame_skip = 5  # process every 5th frame to reduce CPU on VM
     frame_count = 0
 
     while stream.get("running", False):
@@ -182,8 +188,8 @@ def detection_loop(stream_id):
                 pass
             continue
 
-        # ✅ Downscale for faster YOLO
-        small_frame = cv2.resize(frame, (320, 320))
+        # ✅ Downscale further for faster YOLO on CPU-only VM
+        small_frame = cv2.resize(frame, (256, 256))
 
         try:
             results = model(small_frame)[0]
