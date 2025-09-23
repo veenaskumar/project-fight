@@ -132,7 +132,13 @@ def detection_loop(stream_id):
         print(f"DEBUG: Detection loop - Converted to absolute path: {video_source}")
         print(f"DEBUG: Detection loop - Absolute path exists: {os.path.exists(video_source)}")
     
-    cap = cv2.VideoCapture(video_source)
+    # Prefer FFMPEG with low-latency flags for RTSP
+    if str(video_source).startswith("rtsp://"):
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = \
+            "rtsp_transport;tcp|max_delay;0|stimeout;5000000|buffer_size;102400|fifo_size;5000000|reorder_queue_size;0|flags;low_delay"
+        cap = cv2.VideoCapture(video_source, cv2.CAP_FFMPEG)
+    else:
+        cap = cv2.VideoCapture(video_source)
     
     # Check if video capture is successful
     if not cap.isOpened():
@@ -150,7 +156,8 @@ def detection_loop(stream_id):
     out = None
 
     if stream_id not in FRAME_QUEUES:
-        FRAME_QUEUES[stream_id] = queue.Queue()
+        # Small queue to avoid buildup of stale frames
+        FRAME_QUEUES[stream_id] = queue.Queue(maxsize=2)
 
     print(f"DEBUG: Detection loop started for stream {stream_id}")
 
@@ -165,10 +172,14 @@ def detection_loop(stream_id):
             continue
 
         frame_count += 1
+        # Precompute display frame
+        display_frame = cv2.resize(frame, (640, 360))
         if frame_count % frame_skip != 0:
-            # Skip YOLO, just show smaller frame
-            small_disp = cv2.resize(frame, (640, 360))
-            FRAME_QUEUES[stream_id].put(small_disp)
+            # Skip heavy YOLO most frames; enqueue latest preview non-blocking
+            try:
+                FRAME_QUEUES[stream_id].put_nowait(display_frame)
+            except queue.Full:
+                pass
             continue
 
         # ✅ Downscale for faster YOLO
@@ -203,37 +214,15 @@ def detection_loop(stream_id):
             confidence = 0.0
             detected_classes = []
 
-        # ✅ Resize for streaming
-        display_frame = cv2.resize(frame, (640, 360))
-
+        # Enqueue annotated frame non-blocking
         if stream_id in FRAME_QUEUES:
-            FRAME_QUEUES[stream_id].put(display_frame)
+            try:
+                FRAME_QUEUES[stream_id].put_nowait(display_frame)
+            except queue.Full:
+                pass
 
 
-        # YOLO detection
-        try:
-            results = model(frame)[0]
-            confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
-            
-            # Draw bounding boxes for detected objects
-            detected_classes = []
-            if results.boxes is not None:
-                for box in results.boxes:
-                    conf = float(box.conf[0].item())
-                    cls_id = int(box.cls[0].item())
-                    cls_name = get_class_name(cls_id)
-                    detected_classes.append(cls_name)
-
-                    if conf >= 0.3:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        color = (0, 255, 0) if cls_name == "nonviolence" else (0, 0, 255)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                        label = f"{cls_name.upper()} {conf:.2f}"
-                        cv2.putText(frame, label, (x1, y1-10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-        except:
-            confidence = 0.0
+        # Remove duplicate full-size YOLO inference to reduce latency
 
         violence_detected = confidence >= stream["threshold"]
 
@@ -637,5 +626,4 @@ def stream_video(stream_id: str):
         cap.release()
     
     return StreamingResponse(generate_video(), media_type="multipart/x-mixed-replace; boundary=frame")
-
 

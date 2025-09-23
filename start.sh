@@ -23,3 +23,4 @@ nohup streamlit run index.py --server.address=0.0.0.0 --server.port=8501 > "$STR
 echo "Both FastAPI and Streamlit started in background."
 echo "Server log: $SERVER_LOG"
 echo "Streamlit log: $STREAMLIT_LOG"
+
