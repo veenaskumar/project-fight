@@ -18,7 +18,7 @@ nohup uvicorn server:app --host 0.0.0.0 --port 8000 > "$SERVER_LOG" 2>&1 &
 
 # Start Streamlit app in background
 echo "Starting Streamlit..."
-nohup streamlit run index.py --server.address=0.0.0.0 --server.port=8501 > "$STREAMLIT_LOG" 2>&1 &
+nohup streamlit run index.py --server.address=0.0.0.0 --server.port=80 > "$STREAMLIT_LOG" 2>&1 &
 
 echo "Both FastAPI and Streamlit started in background."
 echo "Server log: $SERVER_LOG"
