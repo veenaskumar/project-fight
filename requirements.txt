@@ -1,7 +1,26 @@
+# Core dependencies
 streamlit
 ultralytics
 opencv-python
-dotenv
+python-dotenv
 twilio
 boto3
 streamlit_autorefresh
+
+# FastAPI and web server
+fastapi
+uvicorn[standard]
+websockets
+
+# Additional dependencies for split architecture
+requests
+pydantic
+
+# WebSocket client for frontend
+websocket-client
+
+# Additional OpenCV dependencies
+opencv-contrib-python
+
+# AWS SDK
+botocore

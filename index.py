@@ -10,10 +10,16 @@ from datetime import datetime
 import time
 
 
-# BACKEND_URL = "http://18.170.163.99:8000"
-# WS_URL = "ws://18.170.163.99:8000/ws"
-BACKEND_URL = "http://127.0.0.1:8000"
-WS_URL = "ws://127.0.0.1:8000/ws"
+# Split Architecture Configuration
+# CPU Service (Manager) - handles metadata, S3, GPU lifecycle
+CPU_SERVICE_URL = "http://18.170.163.99:8000"  # Change to your CPU instance IP
+# GPU Service (Worker) - handles detection, streaming
+GPU_SERVICE_URL = "http://127.0.0.1:8001"  # Change to your GPU instance IP
+WS_URL = "ws://127.0.0.1:8001/ws"  # WebSocket points to GPU service
+MJPEG_URL = "http://127.0.0.1:8001/video"  # MJPEG points to GPU service
+
+# For backward compatibility
+BACKEND_URL = CPU_SERVICE_URL
 
 
 st.set_page_config(
@@ -532,7 +538,7 @@ with tabs[2]:
                 
                 # Video display
                 if current_stream.get('running', False):
-                    video_url = f"{BACKEND_URL}/video/{selected_stream_id}"
+                    video_url = f"{MJPEG_URL}/{selected_stream_id}"
 
                     st.markdown("### 📹 Live Video Feed")
                     mode = st.radio("Preview mode", ["WebSocket (low latency)", "MJPEG (fallback)"], horizontal=True)

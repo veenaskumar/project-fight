@@ -1,54 +1,164 @@
-<<<<<<< HEAD
-# nightshield-ai
-=======
->>>>>>> 0799432be215e26229531ac13deeaf92ce2cf829
-# Project-Fight: Violence Detection with YOLOv8
-[![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/veenaskumar/project-fight)
+# Violence Detection System - Split Architecture
 
-This project provides a real-time violence detection system using a YOLOv8 model. The application is built with Streamlit and can process images, video files, and live RTSP streams to identify and log instances of violence.
+A real-time violence detection system using YOLO with a split CPU/GPU architecture for cost optimization.
 
-## Features
-*   **Multi-Source Detection:** Analyze static images (`.jpg`, `.png`), pre-recorded videos (`.mp4`, `.avi`, `.mov`), and live RTSP camera feeds.
-*   **Web Interface:** A user-friendly interface built with Streamlit for easy interaction and monitoring.
-*   **Incident Logging:** Detected events are automatically logged with a timestamp, source, and confidence score into `violence_detection_log.json`. Logs older than 24 hours are automatically removed.
-*   **Incident Review:** A dedicated "Incidents" page displays a table of all detections from the last 24 hours for easy review.
-*   **Adjustable Confidence:** Users can set a custom confidence threshold via a slider to tune the sensitivity of the detection model.
+## 🏗️ Architecture
 
-## Setup
+- **CPU Service (Manager)**: Manages metadata, S3 storage, GPU lifecycle control
+- **GPU Service (Worker)**: Handles YOLO detection and video streaming
+- **Frontend**: Streamlit UI for stream management
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/veenaskumar/project-fight.git
-    cd project-fight
-    ```
+## 📁 Project Structure
 
-2.  **Install the required packages:**
-    It is recommended to use a virtual environment.
-    ```bash
-    pip install -r requirements.txt
-    ```
+```
+project-fight/
+├── CPU_Server.py              # CPU service (manager)
+├── GUP_server.py              # GPU service (worker)
+├── index.py                   # Streamlit frontend
+├── violence_detection_v4.pt   # YOLO model file
+├── logo.png                   # Frontend logo
+├── styles.css                 # Frontend styles
+├── requirements.txt           # Python dependencies
+├── env.example               # Environment template
+├── .env                      # Environment variables (create from template)
+└── docker/                   # Docker deployment files
+    ├── README.md
+    ├── Dockerfile.cpu
+    ├── Dockerfile.gpu
+    ├── Dockerfile.frontend
+    ├── docker-compose.frontend-cpu.yml
+    ├── docker-compose.gpu.yml
+    ├── deploy_instance1.sh
+    └── deploy_instance2.sh
+```
 
-## Usage
+## 🚀 Quick Start
 
-1.  **Run the application:**
-    Execute the following command in your terminal:
-    ```bash
-    streamlit run app.py
-    ```
+### 1. Environment Setup
 
-2.  **Access the web interface:**
-    Open your web browser and navigate to the local URL provided by Streamlit (usually `http://localhost:8501`).
+```bash
+# Create environment file
+cp env.example .env
 
-3.  **Using the Application:**
-    *   **Detection Page:**
-        *   **File Upload:** Use the file uploader to select an image or video. The application will process the file and display the output with bounding boxes around any detected violence.
-        *   **RTSP Stream:** In the sidebar, enter the URL of an RTSP stream, adjust the confidence threshold, and click "Start RTSP Stream" to begin real-time analysis.
-    *   **Incidents Page:**
-        *   Select "Incidents" from the sidebar navigation to view a log of all detected violent events within the last 24 hours.
+# Edit with your configuration
+nano .env
+```
 
-## Project Files
-*   `app.py`: The core Streamlit application logic for the UI, file/stream processing, and model inference.
-*   `violence-detection-through-cctv_step3.pt`: The final YOLOv8 model used for violence detection.
-*   `requirements.txt`: A list of Python dependencies required to run the project.
-*   `violence_detection_log.json`: A log file that stores details of detected incidents.
-*   `rwf-2000_step1.pt` & `fight_detection-m9aq1_step2 (1).pt`: Additional model files, likely from intermediate training steps.
+### 2. Deploy on Instance 1 (Frontend + CPU)
+
+```bash
+# Copy files to instance
+scp -r project-fight/ user@instance1-ip:/home/user/
+
+# SSH and deploy
+ssh user@instance1-ip
+cd project-fight/docker
+chmod +x deploy_instance1.sh
+./deploy_instance1.sh
+```
+
+### 3. Deploy on Instance 2 (GPU Only)
+
+```bash
+# Copy files to instance
+scp -r project-fight/ user@instance2-ip:/home/user/
+
+# SSH and deploy
+ssh user@instance2-ip
+cd project-fight/docker
+chmod +x deploy_instance2.sh
+./deploy_instance2.sh
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Create `.env` file with:
+
+```env
+# AWS Configuration
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+AWS_REGION=us-east-1
+S3_BUCKET=your-bucket-name
+
+# GPU Instance Configuration
+GPU_INSTANCE_ID=i-1234567890abcdef0
+GPU_SERVICE_URL=http://instance2-ip:8001
+
+# API Security
+API_KEY=your-secure-api-key
+
+# Frontend Configuration
+CPU_SERVICE_URL=http://localhost:8000
+GPU_SERVICE_URL=http://instance2-ip:8001
+```
+
+## 📊 Access Points
+
+- **Frontend**: `http://instance1-ip:8501`
+- **CPU API**: `http://instance1-ip:8000`
+- **GPU API**: `http://instance2-ip:8001`
+
+## 🔄 How It Works
+
+1. **User adds stream** via frontend
+2. **CPU service** starts GPU instance if needed
+3. **GPU service** runs YOLO detection
+4. **Video streams** available via WebSocket/MJPEG
+5. **Detection clips** saved to S3
+
+## 🛠️ Management
+
+### Check Services
+
+```bash
+# Instance 1
+docker-compose -f docker/docker-compose.frontend-cpu.yml ps
+
+# Instance 2
+docker-compose -f docker/docker-compose.gpu.yml ps
+```
+
+### View Logs
+
+```bash
+# Instance 1
+docker-compose -f docker/docker-compose.frontend-cpu.yml logs -f
+
+# Instance 2
+docker-compose -f docker/docker-compose.gpu.yml logs -f
+```
+
+### Restart Services
+
+```bash
+# Instance 1
+docker-compose -f docker/docker-compose.frontend-cpu.yml restart
+
+# Instance 2
+docker-compose -f docker/docker-compose.gpu.yml restart
+```
+
+## 📋 Requirements
+
+- Python 3.8+
+- Docker & Docker Compose
+- NVIDIA Docker (for GPU instance)
+- AWS Account with EC2 and S3 access
+- Two EC2 instances (CPU + GPU)
+
+## 🔒 Security
+
+- API key authentication between services
+- AWS IAM roles with minimal permissions
+- Non-root Docker containers
+- Environment variable configuration
+
+## 📈 Cost Optimization
+
+- GPU instance starts only when streams are active
+- CPU instance runs continuously (cheap)
+- Automatic GPU lifecycle management
+- S3 storage for persistence

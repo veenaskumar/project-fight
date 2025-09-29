@@ -1,0 +1,50 @@
+# Docker Compose for Instance 1: Frontend + CPU Service
+version: '3.8'
+
+services:
+  # CPU Service (Manager)
+  cpu-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cpu
+    container_name: violence-cpu-manager
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET}
+      - GPU_INSTANCE_ID=${GPU_INSTANCE_ID}
+      - GPU_SERVICE_URL=${GPU_SERVICE_URL}
+      - API_KEY=${API_KEY}
+    volumes:
+      - ./.env:/app/.env:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: violence-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - CPU_SERVICE_URL=${CPU_SERVICE_URL:-http://cpu-service:8000}
+      - GPU_SERVICE_URL=${GPU_SERVICE_URL}
+    depends_on:
+      - cpu-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
