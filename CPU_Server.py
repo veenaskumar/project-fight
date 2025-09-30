@@ -10,7 +10,7 @@ app = FastAPI()
 # Configuration
 S3_BUCKET = os.getenv("S3_BUCKET", "violence-detector-bucket")
 GPU_INSTANCE_ID = os.getenv("GPU_INSTANCE_ID")
-GPU_SERVICE_URL = os.getenv("GPU_SERVICE_URL", "http://localhost:8001")
+GPU_SERVICE_URL = os.getenv("GPU_SERVICE_URL")
 API_KEY = os.getenv("API_KEY", "default-secret-key")
 S3_STREAMS_KEY = "streams/streams.json"
 S3_LOGS_KEY = "logs/violence_detection_log.json"

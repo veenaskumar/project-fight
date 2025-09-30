@@ -14,9 +14,9 @@ import time
 # CPU Service (Manager) - handles metadata, S3, GPU lifecycle
 CPU_SERVICE_URL = "http://18.170.163.99:8000"  # Change to your CPU instance IP
 # GPU Service (Worker) - handles detection, streaming
-GPU_SERVICE_URL = "http://127.0.0.1:8001"  # Change to your GPU instance IP
-WS_URL = "ws://127.0.0.1:8001/ws"  # WebSocket points to GPU service
-MJPEG_URL = "http://127.0.0.1:8001/video"  # MJPEG points to GPU service
+GPU_SERVICE_URL = "http://18.134.20.221:8001"  # Change to your GPU instance IP
+WS_URL = "ws://18.134.20.221:8001/ws"  # WebSocket points to GPU service
+MJPEG_URL = "http://18.134.20.221:8001/video"  # MJPEG points to GPU service
 
 # For backward compatibility
 BACKEND_URL = CPU_SERVICE_URL
