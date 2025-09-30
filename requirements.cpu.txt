@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+boto3
+botocore
+requests
+pydantic
+python-dotenv
+twilio
+
+
