@@ -20,13 +20,6 @@ if ! command -v docker-compose &> /dev/null; then
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
-# Check if .env exists
-if [ ! -f .env ]; then
-    echo "❌ .env file not found. Creating from template..."
-    cp env.example .env
-    echo "⚠️  Please edit .env file with your configuration before running again."
-    exit 1
-fi
 
 # Build and start CPU service
 echo "🔨 Building CPU service..."
