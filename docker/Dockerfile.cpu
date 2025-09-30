@@ -1,5 +1,5 @@
 # Dockerfile for CPU Service (Manager)
-FROM python:3.9-slim
+FROM python:3.9-slim-bookworm
 
 # Avoid tzdata prompts and reduce apt noise
 ENV DEBIAN_FRONTEND=noninteractive
@@ -7,14 +7,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     gcc \
     g++ \
     curl \
     ca-certificates \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
-
 # Copy minimal CPU requirements first for better caching
 COPY requirements.cpu.txt ./requirements.txt
 
