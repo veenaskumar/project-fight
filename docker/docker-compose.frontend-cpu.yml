@@ -19,7 +19,7 @@ services:
       - GPU_SERVICE_URL=${GPU_SERVICE_URL}
       - API_KEY=${API_KEY}
     volumes:
-      - ./.env:/app/.env:ro
+      - ../.env:/app/.env:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -42,6 +42,8 @@ services:
     depends_on:
       - cpu-service
     restart: unless-stopped
+    volumes:
+      - ../.env:/app/.env:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s

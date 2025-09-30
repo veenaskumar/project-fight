@@ -1,21 +1,21 @@
 # Dockerfile for CPU Service (Manager)
-FROM python:3.9-slim-bookworm
+FROM python:3.11-alpine
 
-# Avoid tzdata prompts and reduce apt noise
-ENV DEBIAN_FRONTEND=noninteractive
+# Avoid bytecode and ensure unbuffered logs
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Set working directory
 WORKDIR /app
 
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+RUN apk add --no-cache \
     gcc \
     g++ \
-    curl \
-    ca-certificates \
+    musl-dev \
     libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
+    openssl-dev \
+    curl \
+    ca-certificates
 # Copy minimal CPU requirements first for better caching
 COPY requirements.cpu.txt ./requirements.txt
 
@@ -26,8 +26,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY CPU_Server.py .
 COPY env.example .
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create non-root user (Alpine)
+RUN adduser -D -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
