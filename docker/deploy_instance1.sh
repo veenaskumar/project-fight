@@ -1,6 +1,8 @@
 #!/bin/bash
 # Deploy Frontend + CPU Service on Instance 1
 
+set -euo pipefail
+
 echo "🚀 Deploying Frontend + CPU Service on Instance 1..."
 
 # Check if Docker is installed
@@ -13,9 +15,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose not found. Installing Docker Compose..."
+# Check if Docker Compose v2 is installed
+if ! docker compose version &> /dev/null; then
+    echo "❌ Docker Compose v2 not found. Installing docker-compose (fallback)..."
     sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 fi
@@ -30,11 +32,11 @@ if [ ! -f ../.env ]; then
 fi
 
 # Build and start services
-echo "🔨 Building services..."
-docker-compose -f docker-compose.frontend-cpu.yml build
+echo "🔨 Building services (cpu-service + frontend)..."
+docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml build
 
 echo "🚀 Starting services..."
-docker-compose -f docker-compose.frontend-cpu.yml up -d
+docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml up -d
 
 # Wait for services to start
 echo "⏳ Waiting for services to start..."
@@ -46,7 +48,7 @@ if curl -f http://localhost:8000/health > /dev/null 2>&1; then
     echo "✅ CPU service is running and healthy!"
 else
     echo "❌ CPU service health check failed. Check logs:"
-    docker-compose -f docker-compose.frontend-cpu.yml logs cpu-service
+    docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs --no-color cpu-service | tail -n 200
 fi
 
 # Check frontend health
@@ -56,14 +58,14 @@ if curl -f http://localhost:8501/_stcore/health > /dev/null 2>&1; then
     echo "🌐 Frontend available at: http://$(curl -s ifconfig.me):8501"
 else
     echo "❌ Frontend health check failed. Check logs:"
-    docker-compose -f docker-compose.frontend-cpu.yml logs frontend
+    docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs --no-color frontend | tail -n 200
 fi
 
 echo "📊 Service status:"
-docker-compose -f docker-compose.frontend-cpu.yml ps
+docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml ps
 
 echo ""
 echo "🎉 Deployment complete!"
 echo "📱 Frontend: http://$(curl -s ifconfig.me):8501"
 echo "🔧 CPU API: http://$(curl -s ifconfig.me):8000"
-echo "📋 Check logs: docker-compose -f docker-compose.frontend-cpu.yml logs -f"
+echo "📋 Check logs: docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs -f"
