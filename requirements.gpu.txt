@@ -1,0 +1,15 @@
+# GPU worker requirements (no Streamlit UI)
+fastapi
+uvicorn[standard]
+websockets
+requests
+pydantic
+boto3
+botocore
+python-dotenv
+websocket-client
+
+# ML stack
+ultralytics
+opencv-python
+opencv-contrib-python

@@ -1,0 +1,12 @@
+# Minimal frontend deps (no heavy ML libs)
+streamlit
+opencv-python-headless
+python-dotenv
+requests
+websocket-client
+boto3
+streamlit_autorefresh
+fastapi
+uvicorn[standard]
+websockets
+pydantic

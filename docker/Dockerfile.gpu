@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y \
 # Create symbolic link for python
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy GPU requirements first for better caching
+COPY requirements.gpu.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
