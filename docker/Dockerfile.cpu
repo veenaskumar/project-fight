@@ -8,14 +8,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 
-RUN apk add --no-cache \
-    gcc \
-    g++ \
-    musl-dev \
-    libffi-dev \
-    openssl-dev \
-    curl \
-    ca-certificates
+RUN set -eux; \
+    sed -i -e 's/dl-cdn.alpinelinux.org/mirrors.edge.kernel.org/g' /etc/apk/repositories || true; \
+    apk update; \
+    apk add --no-cache --update \
+      build-base \
+      musl-dev \
+      libffi-dev \
+      openssl-dev \
+      curl \
+      ca-certificates
 # Copy minimal CPU requirements first for better caching
 COPY requirements.cpu.txt ./requirements.txt
 
