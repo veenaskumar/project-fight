@@ -20,16 +20,32 @@ if ! command -v docker-compose &> /dev/null; then
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
-# Check if NVIDIA Docker is installed
-if ! docker run --rm --gpus all nvidia/cuda:11.8-base-ubuntu20.04 nvidia-smi > /dev/null 2>&1; then
-    echo "❌ NVIDIA Docker not found. Installing NVIDIA Docker..."
-    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-    curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-    curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-    sudo apt-get update && sudo apt-get install -y nvidia-docker2
+has_gpu_runtime() {
+  docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi > /dev/null 2>&1
+}
+
+# Ensure NVIDIA Container Toolkit is installed/configured (Ubuntu 24.04 compatible)
+if ! has_gpu_runtime; then
+    echo "❌ NVIDIA container runtime not detected. Installing NVIDIA Container Toolkit..."
+
+    # Add keyring and repo (stable)
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+      sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+      sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#' | \
+      sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+    sudo apt-get update -y
+    sudo apt-get install -y nvidia-container-toolkit
+    sudo nvidia-ctk runtime configure --runtime=docker
     sudo systemctl restart docker
-    echo "✅ NVIDIA Docker installed. Please run the script again."
-    exit 1
+
+    # Verify again
+    if ! has_gpu_runtime; then
+        echo "❌ GPU runtime still not available after installation. Check driver (nvidia-smi) and Docker setup."
+        exit 1
+    fi
+    echo "✅ NVIDIA Container Toolkit installed and working."
 fi
 
 # Check if .env exists in parent directory
