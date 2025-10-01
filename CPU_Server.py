@@ -130,8 +130,6 @@ async def add_stream(
     # Save to S3
     save_streams_to_s3(streams)
     
-    # Start GPU instance if needed
-    await manage_gpu_instance()
     
     # Instruct GPU service to start processing
     try:
