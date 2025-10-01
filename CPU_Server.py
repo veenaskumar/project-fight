@@ -130,21 +130,6 @@ async def add_stream(
     # Save to S3
     save_streams_to_s3(streams)
     
-    
-    # Instruct GPU service to start processing
-    try:
-        await call_gpu_service("start_stream", data={
-            "stream_id": stream_id,
-            "name": name,
-            "url": url_or_file,
-            "threshold": threshold,
-            "phone": phone,
-            "is_demo": file_uploaded
-        })
-    except HTTPException:
-        # GPU service might not be immediately available
-        print("GPU service not ready yet, stream will start when available")
-    
     return {"stream_id": stream_id, "status": "started"}
 
 @app.get("/active_streams")
