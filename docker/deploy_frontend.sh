@@ -41,9 +41,9 @@ echo "⏳ Waiting for service to start..."
 sleep 10
 
 echo "🔍 Checking service health..."
-if curl -fsS http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+if curl -fsS http://localhost:8080/_stcore/health > /dev/null 2>&1; then
     echo "✅ Frontend is running and healthy!"
-    echo "🌐 Frontend available at: http://$(curl -s ifconfig.me):8501"
+    echo "🌐 Frontend available at: http://$(curl -s ifconfig.me):8080"
 else
     echo "❌ Frontend health check failed. Check logs:"
     docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs --no-color frontend | tail -n 200

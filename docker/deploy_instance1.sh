@@ -53,9 +53,9 @@ fi
 
 # Check frontend health
 echo "🔍 Checking frontend health..."
-if curl -f http://localhost:8501/_stcore/health > /dev/null 2>&1; then
+if curl -f http://localhost:8080/_stcore/health > /dev/null 2>&1; then
     echo "✅ Frontend is running and healthy!"
-    echo "🌐 Frontend available at: http://$(curl -s ifconfig.me):8501"
+    echo "🌐 Frontend available at: http://$(curl -s ifconfig.me):8080"
 else
     echo "❌ Frontend health check failed. Check logs:"
     docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs --no-color frontend | tail -n 200
@@ -66,6 +66,6 @@ docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml ps
 
 echo ""
 echo "🎉 Deployment complete!"
-echo "📱 Frontend: http://$(curl -s ifconfig.me):8501"
+echo "📱 Frontend: http://$(curl -s ifconfig.me):8080"
 echo "🔧 CPU API: http://$(curl -s ifconfig.me):8000"
 echo "📋 Check logs: docker compose --env-file ../.env -f docker-compose.frontend-cpu.yml logs -f"

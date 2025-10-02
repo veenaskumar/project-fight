@@ -35,7 +35,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
     container_name: violence-frontend
     ports:
-      - "8501:8501"
+      - "8080:8080"
     environment:
       - CPU_SERVICE_URL=${CPU_SERVICE_URL:-http://cpu-service:8000}
       - GPU_SERVICE_URL=${GPU_SERVICE_URL}
@@ -45,7 +45,7 @@ services:
     volumes:
       - ../.env:/app/.env:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
