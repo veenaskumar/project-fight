@@ -60,6 +60,23 @@ def generate_presigned_url(key, expires=86400):
         print(f"Presigned URL generation failed for {key}: {e}")
         return None
 
+def wait_for_gpu_service(timeout=300, interval=10):
+    """Wait until GPU FastAPI service is available"""
+    import time, requests
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            r = requests.get(f"{GPU_SERVICE_URL}/health", timeout=5)
+            if r.status_code == 200 and r.json().get("status") == "healthy":
+                print("✅ GPU service is ready")
+                return True
+        except Exception:
+            pass
+        print("⏳ Waiting for GPU service...")
+        time.sleep(interval)
+    raise RuntimeError("GPU service did not become ready in time")
+
+
 async def call_gpu_service(endpoint: str, method: str = "post", data: dict = None):
     """Make authenticated call to GPU service"""
     headers = {"API-KEY": API_KEY}
@@ -91,6 +108,7 @@ async def manage_gpu_instance():
             instance.start()
             instance.wait_until_running()
             print("GPU instance started")
+            await wait_for_gpu_service()
             
         elif not active_streams and state == 'running':
             # Stop GPU instance
@@ -122,7 +140,7 @@ async def add_stream(
         "url": url_or_file,
         "threshold": threshold,
         "phone": phone,
-        "running": True,
+        "running": False,
         "is_demo": file_uploaded,
         "created_at": datetime.now().isoformat()
     }
