@@ -270,7 +270,7 @@ async def gpu_start_stream(data: dict = Body(...), api_key: str = Header(...)):
 
 
 @app.post("/stop_stream")
-async def gpu_stop_stream(data: dict, api_key: str = Header(...)):
+async def gpu_stop_stream(data: dict = Body(...), api_key: str = Header(...)):
     """Stop stream processing on GPU (called by CPU service)"""
     verify_api_key(api_key)
     
@@ -282,7 +282,7 @@ async def gpu_stop_stream(data: dict, api_key: str = Header(...)):
         raise HTTPException(status_code=404, detail="Stream not found")
 
 @app.post("/delete_stream")
-async def gpu_delete_stream(data: dict, api_key: str = Header(...)):
+async def gpu_delete_stream(data: dict = Body(...), api_key: str = Header(...)):
     """Delete stream from GPU (called by CPU service)"""
     verify_api_key(api_key)
     
