@@ -1,7 +1,7 @@
 import threading, time, cv2, base64, tempfile, os, json, boto3, uuid, queue
 import numpy as np
 from datetime import datetime
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header , Body
 from fastapi.responses import StreamingResponse
 from ultralytics import YOLO
 from pathlib import Path
@@ -246,26 +246,28 @@ def stream_video(stream_id: str):
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.post("/start_stream")
-async def gpu_start_stream(data: dict, api_key: str = Header(...)):
+async def gpu_start_stream(data: dict = Body(...), api_key: str = Header(...)):
     """Start stream processing on GPU (called by CPU service)"""
     verify_api_key(api_key)
     
+    # Extract only the fields we actually use
     stream_id = data["stream_id"]
     STREAMS[stream_id] = {
         "stream_id": stream_id,
-        "name": data["name"],
+        "name": data.get("name", f"stream_{stream_id}"),
         "url": data["url"],
-        "threshold": data["threshold"],
+        "threshold": data.get("threshold", 0.5),
         "phone": data.get("phone", ""),
         "is_demo": data.get("is_demo", False),
         "running": True
     }
     
-    # Start detection thread
+    # Start detection loop in background thread
     thread = threading.Thread(target=detection_loop, args=(stream_id,), daemon=True)
     thread.start()
     
     return {"status": "started", "stream_id": stream_id}
+
 
 @app.post("/stop_stream")
 async def gpu_stop_stream(data: dict, api_key: str = Header(...)):
