@@ -137,7 +137,11 @@ def detection_loop(stream_id):
         
         # Create annotated display frame
         display_frame = frame.copy()
-        if confidence >= stream["threshold"]:
+        
+        # Check if actual violence or fall is detected (not just high confidence nonviolence)
+        actual_violence_detected = confidence >= stream["threshold"] and any(c in ["violence", "fall"] for c in detected_classes)
+        
+        if actual_violence_detected:
             cv2.rectangle(display_frame, (10, 10), (400, 80), (0, 0, 255), -1)
             cv2.putText(display_frame, f"VIOLENCE DETECTED! {confidence:.2f}", 
                        (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
@@ -154,9 +158,8 @@ def detection_loop(stream_id):
         # Resize for streaming
         display_frame = cv2.resize(display_frame, (640, 360))
         
-        # Handle clip recording (simplified - you can expand this)
-        violence_detected = confidence >= stream["threshold"]
-        if violence_detected and any(c in ["violence", "fall"] for c in detected_classes):
+        # Handle clip recording - use the same logic as display
+        if actual_violence_detected:
             # Save snapshot
             snapshot_path = f"{stream_id}_{int(time.time())}.jpg"
             cv2.imwrite(snapshot_path, frame)
@@ -229,6 +232,10 @@ def stream_video(stream_id: str):
             # Resize frame for display
             display_frame = cv2.resize(frame, (640, 360))
             
+            # Initialize defaults
+            confidence = 0.0
+            detected_classes = []
+            
             # Skip YOLO processing for some frames to improve streaming performance
             if frame_count % frame_skip == 0:
                 try:
@@ -236,12 +243,14 @@ def stream_video(stream_id: str):
                     small_frame = cv2.resize(frame, (320, 320))
                     results = model(small_frame)[0]
                     confidence = max([float(det.conf[0].item()) for det in results.boxes]) if results.boxes else 0.0
+                    detected_classes = []
                     
                     if results.boxes is not None:
                         for box in results.boxes:
                             conf = float(box.conf[0].item())
                             cls_id = int(box.cls[0].item())
                             cls_name = get_class_name(cls_id)
+                            detected_classes.append(cls_name)  # Add to detected classes list
                             
                             if conf >= 0.3:
                                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -257,8 +266,10 @@ def stream_video(stream_id: str):
                                 cv2.putText(display_frame, label, (x1, y1 - 10),
                                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                     
-                    # Add status overlay
-                    if confidence >= stream["threshold"]:
+                    # Check for actual violence/fall detection (not just high confidence nonviolence)
+                    actual_violence_detected = confidence >= stream["threshold"] and any(c in ["violence", "fall"] for c in detected_classes)
+                    
+                    if actual_violence_detected:
                         cv2.rectangle(display_frame, (10, 10), (400, 80), (0, 0, 255), -1)
                         cv2.putText(display_frame, f"VIOLENCE DETECTED! {confidence:.2f}", 
                                    (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
@@ -269,6 +280,8 @@ def stream_video(stream_id: str):
                     
                 except Exception as e:
                     print(f"Detection error in streaming: {e}")
+                    confidence = 0.0
+                    detected_classes = []
             
             # Add timestamp
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
