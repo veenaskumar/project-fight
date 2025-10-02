@@ -250,6 +250,7 @@ async def gpu_start_stream(data: dict = Body(...), api_key: str = Header(...)):
     """Start stream processing on GPU (called by CPU service)"""
     verify_api_key(api_key)
     
+    
     # Extract only the fields we actually use
     stream_id = data["stream_id"]
     STREAMS[stream_id] = {
@@ -259,7 +260,8 @@ async def gpu_start_stream(data: dict = Body(...), api_key: str = Header(...)):
         "threshold": data.get("threshold", 0.5),
         "phone": data.get("phone", ""),
         "is_demo": data.get("is_demo", False),
-        "running": True
+        "running": True ,
+        "created_at": data.get("created_at","")
     }
     
     # Start detection loop in background thread

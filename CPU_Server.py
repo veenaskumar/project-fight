@@ -62,7 +62,7 @@ def generate_presigned_url(key, expires=86400):
 
 async def call_gpu_service(endpoint: str, method: str = "post", data: dict = None):
     """Make authenticated call to GPU service"""
-    headers = {"X-API-KEY": API_KEY}
+    headers = {"API-KEY": API_KEY}
     url = f"{GPU_SERVICE_URL}/{endpoint}"
     
     try:
