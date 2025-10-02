@@ -3,9 +3,6 @@ import streamlit as st
 import requests, base64, cv2, numpy as np
 from pathlib import Path
 from io import BytesIO
-import threading
-import asyncio
-import websocket
 from datetime import datetime
 import time
 
@@ -15,7 +12,6 @@ import time
 CPU_SERVICE_URL = "http://18.170.163.99:8000"  # Change to your CPU instance IP
 # GPU Service (Worker) - handles detection, streaming
 GPU_SERVICE_URL = "http://18.134.20.221:8001"  # Change to your GPU instance IP
-WS_URL = "ws://18.134.20.221:8001/ws"  # WebSocket points to GPU service
 MJPEG_URL = "http://18.134.20.221:8001/video"  # MJPEG points to GPU service
 
 # For backward compatibility
@@ -96,28 +92,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def run_ws_preview(stream_id):
-    ws_url = f"{WS_URL}/{stream_id}"
-    ws = websocket.WebSocket()
-    ws.connect(ws_url)
-    frame_container = st.empty()
-    last_frame_time = 0
-
-    while True:
-        try:
-            data = ws.recv()
-            now = time.time()
-            if now - last_frame_time < 0.1:  # ✅ Limit to ~10 FPS
-                continue
-            last_frame_time = now
-
-            img_bytes = base64.b64decode(data)
-            nparr = np.frombuffer(img_bytes, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            frame_container.image(frame, channels="BGR", use_container_width=True)
-        except Exception as e:
-            st.write(f"Connection closed: {e}")
-            break
 
 # -------------------------------
 # Header with Logo
@@ -341,10 +315,25 @@ with tabs[1]:
                 # Stream management section
                 for i, stream in enumerate(streams):
                     with st.container():
-                        # Stream card with enhanced styling
-                        status_color = "#28a745" if stream.get('running', False) else "#ffc107"
-                        status_icon = "🟢" if stream.get('running', False) else "🟡"
-                        status_text = "RUNNING" if stream.get('running', False) else "STOPPED"
+                        # Stream card with enhanced styling based on status
+                        stream_status = stream.get('status', 'stopped')
+                        
+                        if stream_status == "running":
+                            status_color = "#28a745"
+                            status_icon = "🟢"
+                            status_text = "RUNNING"
+                        elif stream_status == "installing":
+                            status_color = "#17a2b8"
+                            status_icon = "🔄"
+                            status_text = "INSTALLING"
+                        elif stream_status == "stopping":
+                            status_color = "#fd7e14"
+                            status_icon = "⏹️"
+                            status_text = "STOPPING"
+                        else:  # stopped
+                            status_color = "#ffc107"
+                            status_icon = "🟡"
+                            status_text = "STOPPED"
                         
                         st.markdown(f"""
                         <div style="border: 2px solid {status_color}; border-radius: 12px; padding: 20px; margin: 15px 0; background: {'linear-gradient(135deg, #e8f5e8, #f0f8f0)' if stream.get('running', False) else 'linear-gradient(135deg, #fff3cd, #fef9e7)'}; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
@@ -374,23 +363,28 @@ with tabs[1]:
                         col_a, col_b, col_c, col_d = st.columns([1, 1, 1, 1])
                         
                         with col_a:
-                            if stream.get('running', False):
+                            stream_status = stream.get('status', 'stopped')
+                            
+                            if stream_status == "running":
                                 if st.button("⏹️ Stop Stream", key=f"stop_{stream['stream_id']}", help="Stop this stream"):
                                     try:
                                         resp = requests.post(f"{BACKEND_URL}/stop_stream/{stream['stream_id']}")
                                         if resp.ok:
-                                            st.success("Stream stopped!")
+                                            st.success("Stream stopping...")
                                             st.rerun()
                                         else:
                                             st.error("Failed to stop stream")
                                     except Exception as e:
                                         st.error(f"Error: {e}")
-                            else:
+                            elif stream_status in ["installing", "stopping"]:
+                                # Show disabled button with current status
+                                st.button(f"🔄 {stream_status.title()}...", key=f"status_{stream['stream_id']}", disabled=True, help=f"Stream is currently {stream_status}")
+                            else:  # stopped
                                 if st.button("▶️ Start Stream", key=f"start_{stream['stream_id']}", help="Start this stream"):
                                     try:
                                         resp = requests.post(f"{BACKEND_URL}/start_stream/{stream['stream_id']}")
                                         if resp.ok:
-                                            st.success("Stream started!")
+                                            st.success("Stream starting...")
                                             st.rerun()
                                         else:
                                             st.error("Failed to start stream")
@@ -469,8 +463,22 @@ with tabs[2]:
         # Create stream options with status indicators
         stream_options = {}
         for s in active_streams:
-            status_icon = "🟢" if s.get('running', False) else "🟡"
-            stream_options[f"{status_icon} {s['name']} ({'Running' if s.get('running', False) else 'Stopped'})"] = s['stream_id']
+            stream_status = s.get('status', 'stopped')
+            
+            if stream_status == "running":
+                status_icon = "🟢"
+                status_display = "Running"
+            elif stream_status == "installing":
+                status_icon = "🔄"
+                status_display = "Installing"
+            elif stream_status == "stopping":
+                status_icon = "⏹️"
+                status_display = "Stopping"
+            else:  # stopped
+                status_icon = "🟡"
+                status_display = "Stopped"
+                
+            stream_options[f"{status_icon} {s['name']} ({status_display})"] = s['stream_id']
         
         # Auto-select if coming from dashboard
         if selected_stream_id:
@@ -485,8 +493,20 @@ with tabs[2]:
             
             if current_stream:
                 # Stream status header
-                status_color = "#28a745" if current_stream.get('running', False) else "#ffc107"
-                status_text = "LIVE" if current_stream.get('running', False) else "STOPPED"
+                stream_status = current_stream.get('status', 'stopped')
+                
+                if stream_status == "running":
+                    status_color = "#28a745"
+                    status_text = "LIVE"
+                elif stream_status == "installing":
+                    status_color = "#17a2b8"
+                    status_text = "INSTALLING"
+                elif stream_status == "stopping":
+                    status_color = "#fd7e14"
+                    status_text = "STOPPING"
+                else:  # stopped
+                    status_color = "#ffc107"
+                    status_text = "STOPPED"
                 
                 st.markdown(f"""
                 <div style="background: linear-gradient(90deg, {status_color}, {status_color}88); color: white; padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px;">
@@ -503,23 +523,27 @@ with tabs[2]:
                         st.rerun()
                 
                 with col2:
-                    if current_stream.get('running', False):
+                    stream_status = current_stream.get('status', 'stopped')
+                    
+                    if stream_status == "running":
                         if st.button("⏹️ Stop Stream", help="Stop this stream"):
                             try:
                                 resp = requests.post(f"{BACKEND_URL}/stop_stream/{selected_stream_id}")
                                 if resp.ok:
-                                    st.success("Stream stopped!")
+                                    st.success("Stream stopping...")
                                     st.rerun()
                                 else:
                                     st.error("Failed to stop stream")
                             except Exception as e:
                                 st.error(f"Error: {e}")
-                    else:
+                    elif stream_status in ["installing", "stopping"]:
+                        st.button(f"🔄 {stream_status.title()}...", disabled=True, help=f"Stream is currently {stream_status}")
+                    else:  # stopped
                         if st.button("▶️ Start Stream", help="Start this stream"):
                             try:
                                 resp = requests.post(f"{BACKEND_URL}/start_stream/{selected_stream_id}")
                                 if resp.ok:
-                                    st.success("Stream started!")
+                                    st.success("Stream starting...")
                                     st.rerun()
                                 else:
                                     st.error("Failed to start stream")
@@ -531,27 +555,33 @@ with tabs[2]:
                         st.info("📸 Snapshot saved! (Feature coming soon)")
                 
                 with col4:
-                    if current_stream.get('running', False):
+                    stream_status = current_stream.get('status', 'stopped')
+                    
+                    if stream_status == "running":
                         st.success("🔴 Stream is live and processing")
-                    else:
+                    elif stream_status == "installing":
+                        st.info("🔄 GPU is starting up...")
+                    elif stream_status == "stopping":
+                        st.warning("⏹️ GPU is stopping...")
+                    else:  # stopped
                         st.warning("⏸️ Stream is stopped - click Start to begin")
                 
                 # Video display
-                if current_stream.get('running', False):
+                stream_status = current_stream.get('status', 'stopped')
+                
+                if stream_status == "running":
                     video_url = f"{MJPEG_URL}/{selected_stream_id}"
 
                     st.markdown("### 📹 Live Video Feed")
-                    mode = st.radio("Preview mode", ["WebSocket (low latency)", "MJPEG (fallback)"], horizontal=True)
-
-                    if mode == "WebSocket (low latency)":
-                        if st.button("▶️ Start Live Preview"):
-                            run_ws_preview(selected_stream_id)
-                    else:
-                        st.markdown(f"""
-                        <img src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
-                        <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
-                        """, unsafe_allow_html=True)
-                else:
+                    st.markdown(f"""
+                    <img src="{video_url}" width="100%" style="border-radius: 8px; max-height: 400px; object-fit: contain;" />
+                    <a href="{video_url}" target="_blank" style="display: block; margin-top: 10px; color: #007bff;">Open in new tab</a>
+                    """, unsafe_allow_html=True)
+                elif stream_status == "installing":
+                    st.info("🔄 GPU is starting up... Please wait for the stream to become available.")
+                elif stream_status == "stopping":
+                    st.warning("⏹️ GPU is stopping... Please wait.")
+                else:  # stopped
                     st.info("⏸️ Stream is stopped. Click 'Start Stream' to begin live video feed.")
                 
                 # Stream information
@@ -560,11 +590,21 @@ with tabs[2]:
                 
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Stream Status", "🟢 Live" if current_stream.get('running', False) else "🟡 Stopped")
+                    stream_status = current_stream.get('status', 'stopped')
+                    if stream_status == "running":
+                        status_display = "🟢 Live"
+                    elif stream_status == "installing":
+                        status_display = "🔄 Installing"
+                    elif stream_status == "stopping":
+                        status_display = "⏹️ Stopping"
+                    else:
+                        status_display = "🟡 Stopped"
+                    st.metric("Stream Status", status_display)
                 with col2:
                     st.metric("Stream ID", selected_stream_id[:8] + "...")
                 with col3:
-                    st.metric("Detection", "Active" if current_stream.get('running', False) else "Inactive")
+                    detection_status = "Active" if stream_status == "running" else "Inactive"
+                    st.metric("Detection", detection_status)
                 with col4:
                     st.metric("Type", "Demo Video" if current_stream.get('is_demo') else "RTSP Stream")
                 

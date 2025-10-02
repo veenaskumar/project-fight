@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Header, Query
 from datetime import datetime
 from pathlib import Path
 import os
+import time, requests
 from typing import Optional
 
 app = FastAPI()
@@ -28,6 +29,15 @@ def load_streams_from_s3():
         if e.response["Error"]["Code"] == "NoSuchKey":
             return {}
         raise e
+
+def update_stream_status(stream_id: str, status: str):
+    """Update stream status in S3"""
+    streams = load_streams_from_s3()
+    if stream_id in streams:
+        streams[stream_id]["status"] = status
+        streams[stream_id]["status_updated"] = datetime.now().isoformat()
+        save_streams_to_s3(streams)
+        print(f"Updated stream {stream_id} status to: {status}")
 
 def save_streams_to_s3(streams):
     """Save streams metadata to S3"""
@@ -62,7 +72,7 @@ def generate_presigned_url(key, expires=86400):
 
 def wait_for_gpu_service(timeout=300, interval=10):
     """Wait until GPU FastAPI service is available"""
-    import time, requests
+    
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -104,20 +114,45 @@ async def manage_gpu_instance():
         state = instance.state['Name']
         
         if active_streams and state in ['stopped', 'stopping']:
+            # Update all active streams to "installing" status
+            for stream_id, stream_data in streams.items():
+                if stream_data.get("running", False):
+                    update_stream_status(stream_id, "installing")
+            
             # Start GPU instance
+            print("Starting GPU instance...")
             instance.start()
             instance.wait_until_running()
             print("GPU instance started")
+            
+            # Wait for GPU service to be ready
             await wait_for_gpu_service()
             
+            # Update all active streams to "running" status
+            for stream_id, stream_data in streams.items():
+                if stream_data.get("running", False):
+                    update_stream_status(stream_id, "running")
+            
         elif not active_streams and state == 'running':
+            # Update all streams to "stopping" status
+            for stream_id in streams.keys():
+                update_stream_status(stream_id, "stopping")
+            
             # Stop GPU instance
+            print("Stopping GPU instance...")
             instance.stop()
             instance.wait_until_stopped()
             print("GPU instance stopped")
             
+            # Update all streams to "stopped" status
+            for stream_id in streams.keys():
+                update_stream_status(stream_id, "stopped")
+            
     except Exception as e:
         print(f"GPU instance management error: {e}")
+        # On error, update streams to stopped status
+        for stream_id in streams.keys():
+            update_stream_status(stream_id, "stopped")
 
 @app.post("/add_stream")
 async def add_stream(
@@ -142,7 +177,9 @@ async def add_stream(
         "phone": phone,
         "running": False,
         "is_demo": file_uploaded,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now().isoformat(),
+        "status": "stopped",
+        "status_updated": datetime.now().isoformat()
     }
     
     # Save to S3
@@ -161,7 +198,9 @@ async def get_active_streams():
             "is_demo": data.get("is_demo", False),
             "running": data.get("running", False),
             "threshold": data.get("threshold", 0.5),
-            "phone": data.get("phone", "")
+            "phone": data.get("phone", ""),
+            "status": data.get("status", "stopped"),
+            "status_updated": data.get("status_updated", "")
         }
         for stream_id, data in streams.items()
     ]
@@ -173,6 +212,9 @@ async def stop_stream(stream_id: str):
     
     if stream_id not in streams:
         raise HTTPException(status_code=404, detail="Stream not found")
+    
+    # Update status to stopping
+    update_stream_status(stream_id, "stopping")
     
     # Update metadata
     streams[stream_id]["running"] = False
@@ -187,6 +229,9 @@ async def stop_stream(stream_id: str):
     # Manage GPU instance lifecycle
     await manage_gpu_instance()
     
+    # Update status to stopped
+    update_stream_status(stream_id, "stopped")
+    
     return {"message": f"Stream {stream_id} stopped"}
 
 @app.post("/start_stream/{stream_id}")
@@ -196,6 +241,9 @@ async def start_stream(stream_id: str):
     
     if stream_id not in streams:
         raise HTTPException(status_code=404, detail="Stream not found")
+    
+    # Update status to installing (GPU starting up)
+    update_stream_status(stream_id, "installing")
     
     # Update metadata
     streams[stream_id]["running"] = True
@@ -210,8 +258,11 @@ async def start_stream(stream_id: str):
             "stream_id": stream_id,
             **streams[stream_id]
         })
+        # Update status to running after successful GPU service call
+        update_stream_status(stream_id, "running")
     except HTTPException:
         print("GPU service unavailable, stream will start when available")
+        # Keep status as installing if GPU service is not ready
     
     return {"message": f"Stream {stream_id} started"}
 
